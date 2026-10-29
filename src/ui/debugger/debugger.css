@@ -1,0 +1,213 @@
+.dbg {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--paper);
+  font-size: 13px;
+}
+.dbg-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid #000;
+}
+.dbg-tabs button {
+  font: inherit;
+  font-weight: 700;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--paper);
+  opacity: 0.7;
+  cursor: pointer;
+}
+.dbg-tabs button.on {
+  background: var(--paper);
+  color: var(--ink);
+  opacity: 1;
+}
+.dbg-tabs button:focus-visible {
+  outline: 2px solid var(--yellow);
+}
+.dbg-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+.dbg-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.dbg-bar select {
+  font: inherit;
+  background: var(--ink-3);
+  color: var(--paper);
+  border: 1px solid #000;
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+.dbg-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dbg-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.dbg-line {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 4px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dbg-line.static {
+  cursor: default;
+}
+.dbg-line:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.dbg-line:focus-visible {
+  outline: 2px solid var(--yellow);
+}
+.dbg-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  flex: none;
+  width: 54px;
+}
+.dbg-mech {
+  flex: none;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.dbg.compact .dbg-mech {
+  display: none;
+}
+.dbg-text {
+  flex: 1;
+  min-width: 0;
+}
+.dbg-row.k-event .dbg-text {
+  font-weight: 700;
+  color: var(--cat-event);
+}
+.dbg-row.bad .dbg-text {
+  color: #ffb3bd;
+}
+.dbg-row.cond .dbg-text {
+  color: #ffe08a;
+}
+.dbg-cat {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--red);
+  color: var(--paper);
+}
+.dbg-cat.c-condition {
+  background: #6b5a1a;
+}
+.dbg-cat.c-interrupted {
+  background: var(--violet);
+  color: var(--ink);
+}
+.dbg-detail {
+  padding: 4px 8px 8px 62px;
+  font-size: 12px;
+}
+.dbg-detail dl,
+.dbg-vars {
+  margin: 4px 0;
+  display: grid;
+  gap: 2px;
+}
+.dbg-detail dl > div,
+.dbg-vars > div {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+.dbg-detail dt,
+.dbg-vars dt {
+  opacity: 0.7;
+}
+.dbg-detail dd,
+.dbg-vars dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.dbg-quote {
+  border-left: 3px solid var(--yellow);
+  padding-left: 8px;
+}
+.dbg-reason {
+  margin: 2px 0;
+  color: #ffb3bd;
+}
+.dbg-empty,
+.dbg-more {
+  opacity: 0.7;
+  padding: 6px;
+}
+.dbg h5 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+}
+.dbg-audit b.ok {
+  color: #8ff0cf;
+}
+.dbg-audit b.bad {
+  color: #ffb3bd;
+}
+
+/* Playtest overlay: a corner window, never a popup in the middle of play. */
+.dbg-overlay {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  width: min(460px, calc(100vw - 24px));
+  height: min(380px, 50vh);
+  z-index: 30;
+  background: rgba(21, 22, 28, 0.94);
+  border: 2px solid #000;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 #000;
+  display: flex;
+  flex-direction: column;
+}
+.dbg-overlay header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  font-weight: 800;
+  border-bottom: 1px solid #000;
+}
+
+.dbg-detail-inline {
+  flex: none;
+  font-size: 12px;
+  color: #8ff0cf;
+  font-variant-numeric: tabular-nums;
+}

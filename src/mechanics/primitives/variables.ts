@@ -27,7 +27,9 @@ export const VARIABLES: PrimitiveDef[] = [
     inputs: [num('value', 'Value', 0)],
     exec: (ctx, node) => {
       const v = ctx.num(node, 'value');
-      ctx.scope(String(ctx.param(node, 'scope'))).numbers.set(String(ctx.param(node, 'name')), v);
+      const name = String(ctx.param(node, 'name'));
+      ctx.scope(String(ctx.param(node, 'scope'))).numbers.set(name, v);
+      ctx.detail(name, v);
       return 'then';
     },
     title: varTitle('Set'),
@@ -45,7 +47,9 @@ export const VARIABLES: PrimitiveDef[] = [
     exec: (ctx, node) => {
       const s = ctx.scope(String(ctx.param(node, 'scope')));
       const name = String(ctx.param(node, 'name'));
-      s.numbers.set(name, (s.numbers.get(name) ?? 0) + ctx.num(node, 'value'));
+      const v = (s.numbers.get(name) ?? 0) + ctx.num(node, 'value');
+      s.numbers.set(name, v);
+      ctx.detail(name, v);
       return 'then';
     },
     title: varTitle('Add to'),
@@ -72,7 +76,10 @@ export const VARIABLES: PrimitiveDef[] = [
     execOut: THEN,
     inputs: [boolPort('value', 'Value', true)],
     exec: (ctx, node) => {
-      ctx.scope(String(ctx.param(node, 'scope'))).flags.set(String(ctx.param(node, 'name')), ctx.bool(node, 'value'));
+      const name = String(ctx.param(node, 'name'));
+      const v = ctx.bool(node, 'value');
+      ctx.scope(String(ctx.param(node, 'scope'))).flags.set(name, v);
+      ctx.detail(name, v);
       return 'then';
     },
     title: varTitle('Set'),
@@ -99,7 +106,10 @@ export const VARIABLES: PrimitiveDef[] = [
     execOut: THEN,
     inputs: [vecPort('value', 'Value', 0, 0)],
     exec: (ctx, node) => {
-      ctx.scope(String(ctx.param(node, 'scope'))).vectors.set(String(ctx.param(node, 'name')), ctx.vec(node, 'value'));
+      const name = String(ctx.param(node, 'name'));
+      const v = ctx.vec(node, 'value');
+      ctx.scope(String(ctx.param(node, 'scope'))).vectors.set(name, v);
+      ctx.detail(name, v);
       return 'then';
     },
     title: varTitle('Set'),

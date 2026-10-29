@@ -64,11 +64,12 @@ interface Props {
   trace: Map<string, NodeTrace> | undefined;
   onCommit: (g: MechanicGraph) => void;
   onToast: (msg: string) => void;
+  onSelect?: (id: string | null) => void;
 }
 
 let clipboard: { nodes: MechanicGraph['nodes']; edges: GraphEdge[] } | null = null;
 
-export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEditor({ graph, rules, trace, onCommit, onToast }, ref) {
+export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEditor({ graph, rules, trace, onCommit, onToast, onSelect }, ref) {
   const rf = useReactFlow<ModuleNodeType, CableEdgeType>();
   const [nodes, setNodes] = useState<ModuleNodeType[]>(() => toFlowNodes(graph));
   const [edges, setEdges] = useState<CableEdgeType[]>(() => toFlowEdges(graph));
@@ -319,6 +320,7 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}
           onEdgeDoubleClick={onEdgeDoubleClick}
+          onSelectionChange={({ nodes: sel }) => onSelect?.(sel[0]?.id ?? null)}
           isValidConnection={isValidConnection}
           connectionLineComponent={CableConnectionLine}
           deleteKeyCode={null}

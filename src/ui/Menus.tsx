@@ -24,6 +24,9 @@ export function PauseMenu() {
               Back to the workshop
             </button>
           )}
+          <button className="btn quiet" onClick={() => s.openDocs()}>
+            SPLICE Docs
+          </button>
           <button className="btn quiet" onClick={() => s.setSettingsOpen(true)}>
             Settings
           </button>

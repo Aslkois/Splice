@@ -131,6 +131,39 @@ export const C3: LevelDef = {
   objective: { kind: 'destroyThenReach', tags: ['judgement'], zoneTag: 'exit', text: 'Get out.' },
 };
 
+/**
+ * Where the docs' examples are tried: a gap and a ledge to jump, a target to strike, a crate, cells,
+ * a dynamo to charge beside, and a slow turret to parry. Sandbox rules, so you respawn on death.
+ */
+export const TESTBENCH: LevelDef = {
+  id: 'testbench',
+  name: 'Testbench',
+  subtitle: 'Try it out.',
+  theme: 'lab',
+  width: 2700,
+  height: 1100,
+  spawn: { x: 420, y: 740 },
+  startEnergy: 100,
+  solids: [
+    { x: -40, y: 800, w: 1340, h: 320, style: 'ground' },
+    { x: -40, y: -300, w: 60, h: 1120, style: 'wall' },
+    { x: 1620, y: 860, w: 1120, h: 260, style: 'ground' },
+    { x: 2680, y: -300, w: 60, h: 1180, style: 'wall' },
+    { x: 860, y: 640, w: 180, h: 20, style: 'platform' },
+    { x: 1040, y: 520, w: 120, h: 20, style: 'platform' },
+  ],
+  spawns: [
+    { type: 'dynamo', x: 200, y: 760, reserve: 600, radius: 150 },
+    { type: 'target', x: 620, y: 768, hp: 400 },
+    { type: 'crate', x: 760, y: 776 },
+    { type: 'cell', x: 950, y: 610 },
+    { type: 'cell', x: 1100, y: 490 },
+    { type: 'cell', x: 1900, y: 830 },
+    { type: 'turret', x: 2400, y: 836, facing: -1, interval: 2.6, range: 1250 },
+    { type: 'sign', x: 200, y: 640, text: 'Stand in the dynamo’s ring to refill.', w: 300 },
+  ],
+};
+
 /** Free-form physics playground. */
 export const ARENA: LevelDef = {
   id: 'sandbox',
@@ -186,6 +219,7 @@ export const LEVELS: Record<string, LevelDef> = {
   c2: C2,
   c3: C3,
   sandbox: ARENA,
+  testbench: TESTBENCH,
   ...Object.fromEntries(LABS.map((l) => [l.id, l.level])),
 };
 

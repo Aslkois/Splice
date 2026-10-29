@@ -144,53 +144,67 @@ export function handlerRank(g: MechanicGraph, nodeId: string): { rank: number; o
 }
 
 /**
- * Gives every block without a Blueprint position one, laid out left-to-right by flow depth.
- * Existing positions are never moved.
+ * Gives every block without a Blueprint position one: flow runs left to right in columns, and the
+ * value blocks a block reads sit underneath it. Existing positions are never moved.
  */
 export function ensureBlueprintLayout(g: MechanicGraph): MechanicGraph {
-  const missing = g.nodes.filter((n) => !g.layout.blueprint[n.id]);
-  if (!missing.length) return g;
-  const depth = new Map<string, number>();
-  const incoming = new Map<string, GraphEdge[]>();
-  for (const e of g.edges) {
-    if (!incoming.has(e.to)) incoming.set(e.to, []);
-    incoming.get(e.to)!.push(e);
-  }
-  const visiting = new Set<string>();
-  const depthOf = (id: string): number => {
-    if (depth.has(id)) return depth.get(id)!;
-    if (visiting.has(id)) return 0;
-    visiting.add(id);
-    let d = 0;
-    for (const e of incoming.get(id) ?? []) {
-      const isExec = portType(g, e.from, e.fromPort, 'out') === 'exec';
-      // Value blocks sit just left of the block that reads them; flow moves right.
-      d = Math.max(d, isExec ? depthOf(e.from) + 1 : depthOf(e.from));
-    }
-    const def = getPrimitive(g.nodes.find((n) => n.id === id)?.type ?? '');
-    const isPure = def && !def.execIn && !def.event;
-    visiting.delete(id);
-    depth.set(id, isPure ? Math.max(0, d) : d);
-    return depth.get(id)!;
+  const missing = new Set(g.nodes.filter((n) => !g.layout.blueprint[n.id]).map((n) => n.id));
+  if (!missing.size) return g;
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  const isExec = (id: string) => {
+    const d = getPrimitive(byId.get(id)?.type ?? '');
+    return !!d && (!!d.execIn || !!d.event);
   };
-  // Pure value blocks: place one column left of their first consumer.
-  const placed = { ...g.layout.blueprint };
-  const rows = new Map<number, number>();
-  let maxY = 0;
-  for (const p of Object.values(placed)) maxY = Math.max(maxY, p.y);
-  const base = Object.keys(placed).length ? maxY + 220 : 0;
+  const flowOut = new Map<string, string[]>();
+  const dataIn = new Map<string, string[]>();
+  for (const e of g.edges) {
+    if (portType(g, e.from, e.fromPort, 'out') === 'exec') (flowOut.get(e.from) ?? flowOut.set(e.from, []).get(e.from)!).push(e.to);
+    else (dataIn.get(e.to) ?? dataIn.set(e.to, []).get(e.to)!).push(e.from);
+  }
+  // Flow depth: longest distance from an event (cycles cut).
+  const depth = new Map<string, number>();
+  const visit = (id: string, d: number, path: Set<string>) => {
+    if (path.has(id) || (depth.get(id) ?? -1) >= d) return;
+    depth.set(id, d);
+    path.add(id);
+    for (const n of flowOut.get(id) ?? []) visit(n, d + 1, path);
+    path.delete(id);
+  };
+  for (const n of g.nodes) if (getPrimitive(n.type)?.event) visit(n.id, 0, new Set());
+  for (const n of g.nodes) if (isExec(n.id) && !depth.has(n.id)) visit(n.id, 0, new Set());
+
+  const placed: Record<string, LayoutPoint> = { ...g.layout.blueprint };
+  const existing = Object.values(g.layout.blueprint);
+  const top = existing.length ? Math.max(...existing.map((p) => p.y)) + 260 : 0;
+  const colY = new Map<number, number>();
+  const owned = new Set<string>();
+  // Value blocks under the block that reads them (each placed once, under its first reader).
+  const placeValues = (reader: string, x: number, y: number): number => {
+    let yy = y;
+    for (const src of dataIn.get(reader) ?? []) {
+      if (owned.has(src) || isExec(src)) continue;
+      owned.add(src);
+      if (missing.has(src)) placed[src] = { x: x + 24, y: yy };
+      yy = placeValues(src, x + 24, yy + 110);
+    }
+    return yy;
+  };
+  const execs = g.nodes.filter((n) => isExec(n.id));
+  for (const n of execs) {
+    const col = depth.get(n.id) ?? 0;
+    const x = col * 380;
+    const y = colY.get(col) ?? top;
+    if (missing.has(n.id)) placed[n.id] = { x, y };
+    const p = placed[n.id];
+    const end = placeValues(n.id, p.x, p.y + 170);
+    colY.set(col, Math.max(y + 200, end + 40));
+  }
+  // Loose value blocks.
+  let ly = Math.max(top, ...[...colY.values()]);
   for (const n of g.nodes) {
     if (placed[n.id]) continue;
-    const def = getPrimitive(n.type);
-    let col = depthOf(n.id);
-    if (def && !def.execIn && !def.event) {
-      const consumer = g.edges.find((e) => e.from === n.id);
-      col = consumer ? Math.max(0, depthOf(consumer.to) - 0.5) : col;
-    }
-    const key = Math.round(col * 2);
-    const row = rows.get(key) ?? 0;
-    rows.set(key, row + 1);
-    placed[n.id] = { x: Math.round(col * 340), y: base + row * 170 };
+    placed[n.id] = { x: 0, y: ly };
+    ly = placeValues(n.id, 0, ly + 110) + 20;
   }
   return { ...g, layout: { ...g.layout, blueprint: placed } };
 }

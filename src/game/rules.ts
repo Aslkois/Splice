@@ -5,7 +5,7 @@ import type { GameMode } from '../sim/World';
 
 export function modeFor(levelId: string): GameMode {
   if (levelId === 'hub') return 'hub';
-  if (levelId === 'sandbox') return 'sandbox';
+  if (levelId === 'sandbox' || levelId === 'testbench') return 'sandbox';
   if (LAB_BY_ID[levelId]) return 'lab';
   return 'campaign';
 }
