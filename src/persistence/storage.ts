@@ -21,15 +21,21 @@ export interface Progress {
   labs: Record<string, LabScore>;
 }
 
+export type EditorMode = 'scratch' | 'blueprint';
+
 export interface Settings {
   master: number;
   sfx: number;
   ui: number;
   shake: boolean;
   flashes: boolean;
+  /** Which editor the Workshop opens with. Both edit the same mechanic. */
+  editorMode: EditorMode;
+  /** Width of the Workshop's right-hand inspector, px. */
+  inspectorWidth: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { master: 0.8, sfx: 0.9, ui: 0.6, shake: true, flashes: true };
+export const DEFAULT_SETTINGS: Settings = { master: 0.8, sfx: 0.9, ui: 0.6, shake: true, flashes: true, editorMode: 'scratch', inspectorWidth: 360 };
 
 function read(key: string): string | null {
   try {
@@ -86,7 +92,10 @@ export function loadSettings(): Settings {
   }
   const base = reduced ? { ...DEFAULT_SETTINGS, shake: false, flashes: false } : { ...DEFAULT_SETTINGS };
   try {
-    return { ...base, ...(JSON.parse(read(KEYS.settings) ?? '{}') as Partial<Settings>) };
+    const saved = { ...base, ...(JSON.parse(read(KEYS.settings) ?? '{}') as Partial<Settings>) };
+    if (saved.editorMode !== 'scratch' && saved.editorMode !== 'blueprint') saved.editorMode = base.editorMode;
+    if (!Number.isFinite(saved.inspectorWidth)) saved.inspectorWidth = base.inspectorWidth;
+    return saved;
   } catch {
     return base;
   }

@@ -45,7 +45,7 @@ export interface CompiledNode {
   type: string;
   def: PrimitiveDef;
   params: Record<string, ParamValue>;
-  /** Canvas order: top-to-bottom, then left-to-right. Used to order handlers of the same event. */
+  /** Position in the model's node list. Orders handlers of the same event. */
   order: number;
   execOut: Map<string, string>;
   dataIn: Map<string, { node: string; port: string }>;
@@ -71,6 +71,8 @@ export interface PrimitiveDef {
   evaluate?: (ctx: ExecContext, node: CompiledNode, port: string) => Value;
   /** Only meaningful while a hit is being intercepted. */
   needsOpenHit?: boolean;
+  /** Flow outputs taken when a condition or gate said "no" (the debugger files them as conditions). */
+  closedPorts?: string[];
   /** Short exchange note shown on the node in the Workshop. */
   cost?: string;
   /** Dynamic title, e.g. "On F Pressed". */

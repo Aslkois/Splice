@@ -2,11 +2,12 @@ import type { Hit } from '../sim/combat/Combat';
 import type { MechanicDriver, SimEventKind } from '../sim/driver';
 import type { Entity } from '../sim/entities/Entity';
 import type { Player } from '../sim/entities/Player';
-import type { FundingPool, OpResult, OPERATIONS } from '../sim/exchange/Exchange';
+import { emptyPool, type FundingPool, type OpResult, type OPERATIONS } from '../sim/exchange/Exchange';
 import type { InputFrame } from '../sim/input';
 import type { World } from '../sim/World';
 import type { CompiledMechanic } from './compile';
 import type { ParamValue, PortType, VecValue } from './schema';
+import { formatValue, TraceLog, type TraceCategory, type TraceEntry, type TraceValue } from './trace';
 import type { CompiledNode, Value } from './types';
 
 export const LIMITS = {
@@ -67,14 +68,10 @@ interface Continuation {
   port: string;
 }
 
-interface ChargeWatch {
-  seq: number;
-  ctx: ExecContext;
-  node: CompiledNode;
-  name: string;
-  target: number;
-  started: number;
-}
+/** A paused execution waiting on the world: a charge filling up, or a windup running its course. */
+type Watch =
+  | { kind: 'charge'; seq: number; ctx: ExecContext; node: CompiledNode; name: string; target: number; started: number }
+  | { kind: 'windup'; seq: number; ctx: ExecContext; node: CompiledNode; started: number; until: number };
 
 interface QueuedEvent {
   kind: SimEventKind;
@@ -96,14 +93,19 @@ export function defaultFor(type: PortType): Value {
   }
 }
 
+const titleOf = (node: CompiledNode) => node.def.title?.(node.params) ?? node.def.label;
+
 /** One execution of one event handler (and any continuations it schedules). */
 export class ExecContext {
   readonly outputs = new Map<string, Value>();
-  readonly funding: FundingPool = { energy: 0 };
+  readonly funding: FundingPool = emptyPool();
   refs = 0;
   finished = false;
   private branchDepth = 0;
   private dataDepth = 0;
+  /** Trace entry of the block executing right now, and the input values it has read so far. */
+  private current: TraceEntry | null = null;
+  private reads: TraceValue[] | null = null;
 
   constructor(
     readonly host: MechanicHost,
@@ -111,6 +113,7 @@ export class ExecContext {
     readonly eventNode: CompiledNode,
     readonly payload: Record<string, unknown>,
     readonly depth: number,
+    readonly runId: number,
   ) {}
 
   get world(): World {
@@ -140,6 +143,13 @@ export class ExecContext {
   }
 
   read(node: CompiledNode, port: string): Value {
+    const top = this.dataDepth === 0 && this.reads;
+    const v = this.readValue(node, port);
+    if (top && this.reads) this.reads.push({ port, value: formatValue(v) });
+    return v;
+  }
+
+  private readValue(node: CompiledNode, port: string): Value {
     const link = node.dataIn.get(port);
     if (!link) return this.literal(node, port);
     const src = this.mech.nodes.get(link.node);
@@ -210,13 +220,41 @@ export class ExecContext {
     args: Parameters<(typeof OPERATIONS)[K]['cost']>[1],
   ): OpResult {
     const r = this.world.exchange.perform(op, this.actor, args, this.funding);
+    const cur = this.current;
+    if (cur) {
+      cur.cost = { energy: r.cost.energy, stamina: r.cost.stamina };
+      if (r.quote) cur.quote = r.quote;
+      if (!r.ok) {
+        cur.ok = false;
+        cur.reason = r.reason ?? 'failed';
+        cur.category = r.failKind ?? 'logic';
+      }
+    }
     if (!r.ok) this.host.traceFail(this.mech, node, r.reason ?? 'failed');
     return r;
   }
 
-  fail(node: CompiledNode, reason: string): null {
+  fail(node: CompiledNode, reason: string, category: TraceCategory): null {
+    const cur = this.current;
+    if (cur) {
+      cur.ok = false;
+      cur.reason = reason;
+      cur.category = category;
+    }
     this.host.traceFail(this.mech, node, reason);
     return null;
+  }
+
+  /** Adds a labelled figure to the trace entry of the block running now (e.g. a variable's new value). */
+  detail(label: string, value: Value): void {
+    const cur = this.current;
+    if (!cur) return;
+    (cur.details ??= []).push({ label, value: formatValue(value) });
+  }
+
+  /** Records a pause/resume of this run in the trace. */
+  note(node: CompiledNode, kind: 'wait' | 'resume', text: string, extra: Partial<TraceEntry> = {}): void {
+    this.host.record(this, node, kind, text, extra);
   }
 
   // ---- flow ----
@@ -229,9 +267,34 @@ export class ExecContext {
       if (!node || !node.def.exec) return;
       this.host.spend(1);
       this.host.trace(this.mech, node);
-      const out = node.def.exec(this, node);
+      const out = this.execTraced(node);
       if (out == null) return;
       nextId = node.execOut.get(out);
+    }
+  }
+
+  private execTraced(node: CompiledNode): string | null {
+    const entry = this.host.record(this, node, 'block', titleOf(node));
+    const prevEntry = this.current;
+    const prevReads = this.reads;
+    this.current = entry;
+    this.reads = entry ? [] : null;
+    try {
+      const out = node.def.exec!(this, node);
+      if (entry) {
+        if (this.reads?.length) entry.values = this.reads;
+        if (out != null) entry.port = out;
+        if (entry.ok && out != null && node.def.closedPorts?.includes(out)) {
+          entry.category = 'condition';
+          entry.reason = node.def.execOut?.find((p) => p.id === out)?.label ?? out;
+        }
+        if (entry.cost) entry.after = { energy: this.actor.account.energy, stamina: this.actor.account.stamina };
+        this.host.traceLog.touch();
+      }
+      return out;
+    } finally {
+      this.current = prevEntry;
+      this.reads = prevReads;
     }
   }
 
@@ -253,6 +316,10 @@ export class ExecContext {
 
   watchCharge(node: CompiledNode, name: string, target: number): boolean {
     return this.host.watchCharge(this, node, name, target);
+  }
+
+  windUp(node: CompiledNode, seconds: number): boolean {
+    return this.host.windUp(this, node, seconds);
   }
 
   emit(name: string, value: number): void {
@@ -280,15 +347,25 @@ export class ExecContext {
 
 /**
  * Executes compiled mechanics for the player. Deterministic: mechanics resolve in equip-slot order,
- * handlers of the same event in canvas order, queued events FIFO. Every tick is bounded.
+ * handlers of the same event in run order (their order in the mechanic), queued events FIFO. Every tick is bounded.
  */
+export interface HostCarry {
+  trace: TraceLog;
+  characterScope: Scope;
+  scopes: Map<string, Scope>;
+  states: Map<string, { type: string; state: object }>;
+  keyDownAt: Map<string, number>;
+}
+
 export class MechanicHost implements MechanicDriver {
-  readonly characterScope: Scope = newScope();
+  readonly characterScope: Scope;
+  readonly traceLog: TraceLog;
   private scopes = new Map<string, Scope>();
-  private states = new Map<string, object>();
+  private states = new Map<string, { type: string; state: object }>();
+  private nextRun = 1;
   private queue: QueuedEvent[] = [];
   private delayed: Continuation[] = [];
-  private watches: ChargeWatch[] = [];
+  private watches: Watch[] = [];
   private seq = 0;
   private steps = 0;
   private eventsThisTick = 0;
@@ -303,7 +380,21 @@ export class MechanicHost implements MechanicDriver {
   constructor(
     readonly world: World,
     readonly mechanics: CompiledMechanic[],
+    carry?: HostCarry,
   ) {
+    this.traceLog = carry?.trace ?? new TraceLog();
+    this.characterScope = carry?.characterScope ?? newScope();
+    if (carry) {
+      // Hot reload: variables, timers and block memory (toggles, cooldowns) of mechanics that are
+      // still equipped carry over. Block memory only carries when the block is still the same type.
+      const ids = new Set(mechanics.map((m) => m.id));
+      for (const [id, s] of carry.scopes) if (ids.has(id)) this.scopes.set(id, s);
+      for (const [key, st] of carry.states) {
+        const [mid, nid] = key.split('\u0000');
+        if (mechanics.find((m) => m.id === mid)?.nodes.get(nid)?.type === st.type) this.states.set(key, st);
+      }
+      for (const [k, t] of carry.keyDownAt) this.keyDownAt.set(k, t);
+    }
     this.listened = { pressed: new Set(), released: new Set(), held: new Set(), tick: false };
     for (const m of mechanics) {
       for (const n of m.events.get('key.pressed') ?? []) this.listened.pressed.add(String(n.params.key ?? 'F'));
@@ -330,6 +421,7 @@ export class MechanicHost implements MechanicDriver {
         this.delayed = this.delayed.filter((c) => c.at > now + 1e-9);
         for (const c of due) {
           c.ctx.refs--;
+          c.ctx.note(c.node, 'resume', `${titleOf(c.node)}: wait over`, { port: c.port });
           this.execute(c.ctx, () => c.ctx.run(c.node, c.port));
         }
       }
@@ -361,6 +453,7 @@ export class MechanicHost implements MechanicDriver {
   fireSync(kind: SimEventKind, payload: Record<string, unknown>): void {
     if (this.syncDepth >= LIMITS.maxSyncDepth) {
       this.world.diagnose('Interception nested too deeply — inner handlers skipped.');
+      this.recordLimit(null, `Interception nested more than ${LIMITS.maxSyncDepth} deep — inner handlers skipped`);
       return;
     }
     this.syncDepth++;
@@ -375,6 +468,7 @@ export class MechanicHost implements MechanicDriver {
     while (this.queue.length) {
       if (this.eventsThisTick >= LIMITS.maxEventsPerTick) {
         this.world.diagnose(`More than ${LIMITS.maxEventsPerTick} events in one tick — the rest were dropped. Check for signal loops.`);
+        this.recordLimit(null, `More than ${LIMITS.maxEventsPerTick} events in one tick — ${this.queue.length} dropped`);
         this.queue.length = 0;
         return;
       }
@@ -398,14 +492,17 @@ export class MechanicHost implements MechanicDriver {
     this.delayed.length = 0;
     this.watches.length = 0;
     this.keyDownAt.clear();
+    if (this.world.player) this.world.player.windingUp = 0;
   }
 
   /**
    * Retire this host (mechanics were swapped). Pending continuations are abandoned, but any energy
    * they were holding goes back to the battery: swapping code never destroys resources.
    */
-  dispose(): void {
+  dispose(): HostCarry {
     const ctxs = new Set<ExecContext>([...this.delayed.map((c) => c.ctx), ...this.watches.map((w) => w.ctx)]);
+    const p = this.world.player;
+    if (p) p.windingUp = Math.max(0, p.windingUp - this.watches.filter((w) => w.kind === 'windup').length);
     this.delayed.length = 0;
     this.watches.length = 0;
     this.queue.length = 0;
@@ -413,6 +510,15 @@ export class MechanicHost implements MechanicDriver {
       ctx.refs = 0;
       ctx.settle();
     }
+    return { trace: this.traceLog, characterScope: this.characterScope, scopes: this.scopes, states: this.states, keyDownAt: this.keyDownAt };
+  }
+
+  /** Energy released from charges into executions that are paused right now (delays, windups, channels). */
+  pooledEnergy(): number {
+    const ctxs = new Set<ExecContext>([...this.delayed.map((c) => c.ctx), ...this.watches.map((w) => w.ctx)]);
+    let sum = 0;
+    for (const c of ctxs) sum += c.funding.energy;
+    return sum;
   }
 
   // ---- internals used by ExecContext / primitives ----
@@ -429,43 +535,102 @@ export class MechanicHost implements MechanicDriver {
   }
 
   nodeState<T extends object>(mechId: string, nodeId: string, init: () => T): T {
-    const key = `${mechId}:${nodeId}`;
-    let s = this.states.get(key) as T | undefined;
-    if (!s) this.states.set(key, (s = init()));
-    return s;
+    const key = `${mechId}\u0000${nodeId}`;
+    let s = this.states.get(key);
+    if (!s) {
+      const type = this.mechanics.find((m) => m.id === mechId)?.nodes.get(nodeId)?.type ?? '';
+      this.states.set(key, (s = { type, state: init() }));
+    }
+    return s.state as T;
   }
 
   schedule(ctx: ExecContext, node: CompiledNode, port: string, seconds: number): boolean {
     const pending = this.delayed.filter((c) => c.ctx.mech === ctx.mech).length + this.watches.filter((w) => w.ctx.mech === ctx.mech).length;
     if (pending >= LIMITS.maxPendingPerMechanic) {
       this.world.diagnose(`'${ctx.mech.name}' has ${pending} pending delays — new ones are dropped.`, ctx.mech.id);
-      this.traceFail(ctx.mech, node, 'too many pending delays');
+      ctx.fail(node, `more than ${LIMITS.maxPendingPerMechanic} pending delays`, 'limit');
       return false;
     }
     ctx.refs++;
     const wait = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
     // Even a zero delay resumes on the next tick: delays can never be used to spin within a tick.
-    this.delayed.push({ seq: this.seq++, at: this.world.time + Math.max(wait, 1e-6), ctx, node, port });
+    const at = this.world.time + Math.max(wait, 1e-6);
+    this.delayed.push({ seq: this.seq++, at, ctx, node, port });
+    ctx.note(node, 'wait', `waiting ${formatValue(wait)} s — resumes on tick ${Math.ceil(at * 60 - 1e-6)}`);
     return true;
   }
 
   watchCharge(ctx: ExecContext, node: CompiledNode, name: string, target: number): boolean {
     const pending = this.delayed.filter((c) => c.ctx.mech === ctx.mech).length + this.watches.filter((w) => w.ctx.mech === ctx.mech).length;
     if (pending >= LIMITS.maxPendingPerMechanic) {
-      this.traceFail(ctx.mech, node, 'too many pending channels');
+      ctx.fail(node, `more than ${LIMITS.maxPendingPerMechanic} pending delays and channels`, 'limit');
       return false;
     }
     ctx.refs++;
-    this.watches.push({ seq: this.seq++, ctx, node, name, target, started: this.world.time });
+    this.watches.push({ kind: 'charge', seq: this.seq++, ctx, node, name, target, started: this.world.time });
+    ctx.note(node, 'wait', `channelling "${name}" until it holds ${formatValue(target)} E`);
+    return true;
+  }
+
+  windUp(ctx: ExecContext, node: CompiledNode, seconds: number): boolean {
+    const pending = this.delayed.filter((c) => c.ctx.mech === ctx.mech).length + this.watches.filter((w) => w.ctx.mech === ctx.mech).length;
+    if (pending >= LIMITS.maxPendingPerMechanic) {
+      ctx.fail(node, `more than ${LIMITS.maxPendingPerMechanic} pending delays and windups`, 'limit');
+      return false;
+    }
+    const p = this.world.player;
+    if (!p || !p.alive) {
+      ctx.fail(node, 'you are down', 'requirement');
+      return false;
+    }
+    ctx.refs++;
+    p.windingUp++;
+    const now = this.world.time;
+    const wait = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+    this.watches.push({ kind: 'windup', seq: this.seq++, ctx, node, started: now, until: now + Math.max(wait, 1e-6) });
+    ctx.note(node, 'wait', `winding up for ${formatValue(wait)} s — moving slower; a hit of ${this.world.exchange.table.charge.interruptThreshold}+ damage breaks it`);
     return true;
   }
 
   emitSignal(name: string, value: number, depth: number, from: CompiledMechanic): void {
     if (depth > LIMITS.maxEmitDepth) {
       this.world.diagnose(`Signal '${name}' was re-emitted ${LIMITS.maxEmitDepth} levels deep — stopped to prevent a loop.`, from.id);
+      this.recordLimit(from, `Signal "${name}" re-emitted ${LIMITS.maxEmitDepth} levels deep — dropped to prevent a loop`);
       return;
     }
     this.queue.push({ kind: 'custom', payload: { name, value }, depth });
+  }
+
+  /** Adds a trace entry for a run. Returns it so the block's outcome can be filled in. */
+  record(ctx: ExecContext, node: CompiledNode, kind: TraceEntry['kind'], text: string, extra: Partial<TraceEntry> = {}): TraceEntry | null {
+    return this.traceLog.push({
+      tick: this.world.tick,
+      time: this.world.time,
+      mechId: ctx.mech.id,
+      mechName: ctx.mech.name,
+      nodeId: node.id,
+      nodeType: node.type,
+      run: ctx.runId,
+      kind,
+      text,
+      ok: true,
+      ...extra,
+    });
+  }
+
+  private recordLimit(mech: CompiledMechanic | null, text: string, run = 0): void {
+    this.traceLog.push({
+      tick: this.world.tick,
+      time: this.world.time,
+      mechId: mech?.id ?? '',
+      mechName: mech?.name ?? 'Engine',
+      run,
+      kind: 'limit',
+      text,
+      ok: false,
+      category: 'limit',
+      reason: text,
+    });
   }
 
   trace(mech: CompiledMechanic, node: CompiledNode): void {
@@ -499,8 +664,13 @@ export class MechanicHost implements MechanicDriver {
         const spec = ev.def.event!;
         if (spec.match && !spec.match(ev.params, payload, mech.id)) continue;
         if (this.throttled) return;
-        const ctx = new ExecContext(this, mech, ev, payload, depth);
+        const ctx = new ExecContext(this, mech, ev, payload, depth, this.nextRun++);
         this.trace(mech, ev);
+        if (this.traceLog.enabled) {
+          const values: TraceValue[] = [];
+          if (spec.data) for (const o of ev.def.outputs ?? []) values.push({ port: o.id, value: formatValue(spec.data(ctx, o.id)) });
+          this.record(ctx, ev, 'event', titleOf(ev), values.length ? { values, port: 'then' } : { port: 'then' });
+        }
         const a = this.activity.get(mech.id);
         if (a && ev.execOut.size) {
           a.lastRun = this.world.time;
@@ -522,6 +692,7 @@ export class MechanicHost implements MechanicDriver {
       if (e instanceof BudgetExceeded) {
         this.throttled = true;
         this.queue.length = 0;
+        this.recordLimit(ctx.mech, `Stopped: ${e.message}`, ctx.runId);
         this.world.diagnose(`'${ctx.mech.name}' was stopped: ${e.message}. Is something looping?`, ctx.mech.id);
         const a = this.activity.get(ctx.mech.id);
         if (a) {
@@ -530,6 +701,7 @@ export class MechanicHost implements MechanicDriver {
         }
       } else {
         this.world.diagnose(`'${ctx.mech.name}' errored: ${(e as Error).message}`, ctx.mech.id);
+        this.recordLimit(ctx.mech, `Errored: ${(e as Error).message}`, ctx.runId);
       }
     } finally {
       ctx.settle();
@@ -548,24 +720,60 @@ export class MechanicHost implements MechanicDriver {
 
   private checkWatches(now: number): void {
     const player = this.world.player;
-    const keep: ChargeWatch[] = [];
-    const resumes: { w: ChargeWatch; port: string }[] = [];
+    const ex = this.world.exchange;
+    const keep: Watch[] = [];
+    const resumes: { w: Watch; port: string; ok: boolean; text: string; extra: Partial<TraceEntry> }[] = [];
     for (const w of this.watches) {
+      if (w.kind === 'windup') {
+        const broken = !player || !player.alive || player.staggeredAt >= w.started;
+        if (broken) {
+          if (player) player.windingUp = Math.max(0, player.windingUp - 1);
+          resumes.push({ w, port: 'interrupted', ok: false, text: 'windup interrupted', extra: { category: 'interrupted', reason: !player?.alive ? 'you went down' : 'you were hit while winding up' } });
+        } else if (now >= w.until - 1e-9) {
+          player.windingUp = Math.max(0, player.windingUp - 1);
+          const prepared = now - w.started;
+          ex.fund(w.ctx.funding, 0, prepared);
+          const { factor } = ex.windupOf(w.ctx.funding);
+          resumes.push({
+            w,
+            port: 'then',
+            ok: true,
+            text: 'wound up',
+            extra: { values: [{ port: 'prepared', value: `${formatValue(prepared)} s` }, { port: 'energy price', value: `×${formatValue(factor)}` }] },
+          });
+        } else keep.push(w);
+        continue;
+      }
       const ch = player?.account.charges.get(w.name);
-      if (!player || !player.alive || !ch) resumes.push({ w, port: 'interrupted' });
-      else if (ch.amount >= w.target - 1e-9) {
-        this.world.exchange.stopCharge(player, w.name);
-        const energy = this.world.exchange.releaseCharge(player, w.name);
-        w.ctx.funding.energy += energy;
-        w.ctx.setOutput(w.node, 'energy', energy);
-        resumes.push({ w, port: 'charged' });
-      } else if (!ch.channeling || now - w.started > LIMITS.channelTimeout) resumes.push({ w, port: 'interrupted' });
-      else keep.push(w);
+      if (!player || !player.alive || !ch) {
+        resumes.push({ w, port: 'interrupted', ok: false, text: `"${w.name}" interrupted`, extra: { category: 'interrupted', reason: !player?.alive ? 'you went down' : 'the charge is gone' } });
+      } else if (ch.amount >= w.target - 1e-9) {
+        ex.stopCharge(player, w.name);
+        const rel = ex.releaseCharge(player, w.name);
+        ex.fund(w.ctx.funding, rel.energy, rel.windup);
+        w.ctx.setOutput(w.node, 'energy', rel.energy);
+        resumes.push({
+          w,
+          port: 'charged',
+          ok: true,
+          text: `"${w.name}" charged`,
+          extra: { values: [{ port: 'energy', value: formatValue(rel.energy) }, { port: 'prepared', value: `${formatValue(rel.windup)} s` }] },
+        });
+      } else if (!ch.channeling || now - w.started > LIMITS.channelTimeout) {
+        resumes.push({
+          w,
+          port: 'interrupted',
+          ok: false,
+          text: `"${w.name}" interrupted`,
+          extra: { category: 'interrupted', reason: ch.channeling ? `still short after ${LIMITS.channelTimeout} s` : 'channelling stopped — hit, or held by another block' },
+        });
+      } else keep.push(w);
     }
     this.watches = keep;
     resumes.sort((a, b) => a.w.seq - b.w.seq);
-    for (const { w, port } of resumes) {
+    for (const { w, port, ok, text, extra } of resumes) {
       w.ctx.refs--;
+      w.ctx.note(w.node, 'resume', text, { port, ok, ...extra });
       this.execute(w.ctx, () => w.ctx.run(w.node, port));
     }
   }

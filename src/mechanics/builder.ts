@@ -22,7 +22,8 @@ export class GraphBuilder {
     const def = getPrimitive(type);
     if (!def) throw new Error(`unknown primitive ${type}`);
     const id = `n${++this.n}`;
-    this.graph.nodes.push({ id, type, x: pos?.x ?? (this.n % 4) * 260, y: pos?.y ?? this.n * 120, params: { ...defaultParams(def), ...params } });
+    this.graph.nodes.push({ id, type, params: { ...defaultParams(def), ...params } });
+    this.graph.layout.blueprint[id] = { x: pos?.x ?? (this.n % 4) * 260, y: pos?.y ?? this.n * 120 };
     return id;
   }
 
@@ -63,8 +64,9 @@ export function attachMechanics(world: World, graphs: MechanicGraph[], opts: Val
   }
   const compiled = all.filter((c) => c.ok);
   const rejected = all.filter((c) => !c.ok);
-  if (world.mechanics instanceof MechanicHost) world.mechanics.dispose();
-  const host = new MechanicHost(world, compiled);
+  // Hot reload: the old runtime hands over the debugger trace and the player's variables/timers.
+  const carry = world.mechanics instanceof MechanicHost ? world.mechanics.dispose() : undefined;
+  const host = new MechanicHost(world, compiled, carry);
   world.mechanics = host;
   return { host, compiled, rejected };
 }

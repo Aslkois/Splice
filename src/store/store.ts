@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { synth } from '../audio/Synth';
 import { presentation, runner, setRunnerHooks } from '../game/bridge';
+import { modeFor, rulesFor } from '../game/rules';
+import { EXAMPLE_BY_ID } from '../docs/examples';
 import { emptyGraph, MAX_EQUIPPED, uid, type MechanicGraph, type MechanicLibrary } from '../mechanics/schema';
 import {
   loadLibrary,
@@ -15,12 +17,20 @@ import {
   type Progress,
   type Settings,
 } from '../persistence/storage';
-import type { ValidateOptions } from '../mechanics/validate';
 import { Door } from '../sim/entities/props';
-import { LAB_BY_ID } from '../sim/levels/labs';
 import type { GameMode } from '../sim/World';
 
+export { modeFor, rulesFor };
+
 export type Screen = 'title' | 'game';
+
+/** Where the docs are open. */
+export type DocRoute =
+  | { kind: 'index' }
+  | { kind: 'article'; id: string }
+  | { kind: 'block'; type: string }
+  | { kind: 'example'; id: string }
+  | { kind: 'examples' };
 
 interface History {
   past: MechanicGraph[];
@@ -46,6 +56,21 @@ export interface AppState {
   settings: Settings;
   /** Primitive types the player has not opened the drawer on since unlocking. */
   justUnlockedTier: number | null;
+  docs: { open: boolean; route: DocRoute; history: DocRoute[] };
+  /** Trying a docs example in the testbench: only that mechanic runs, your equipment is untouched. */
+  trial: { id?: string; title: string; graph: MechanicGraph } | null;
+  /** The debugger window while playing. */
+  debugOverlay: boolean;
+
+  openDocs(route?: DocRoute): void;
+  docsBack(): void;
+  closeDocs(): void;
+  tryExample(id: string): void;
+  /** Runs any mechanic alone in the testbench (docs block examples, examples). */
+  tryMechanic(title: string, graph: MechanicGraph, exampleId?: string): void;
+  /** Puts a copy of a mechanic on your shelf (not equipped) and selects it. */
+  addToShelf(g: MechanicGraph): string;
+  setDebugOverlay(open: boolean): void;
 
   enterLevel(levelId: string): void;
   toTitle(): void;
@@ -68,6 +93,8 @@ export interface AppState {
   renameMechanic(id: string, name: string): void;
   /** Records an edit as one undoable step. */
   commitGraph(g: MechanicGraph): void;
+  /** Saves a change that isn't an edit (auto-placing blocks that had no position): no undo step. */
+  saveQuietly(g: MechanicGraph): void;
   undo(): void;
   redo(): void;
   toggleEquip(id: string): void;
@@ -76,26 +103,11 @@ export interface AppState {
   resetProgress(): void;
 }
 
-export function modeFor(levelId: string): GameMode {
-  if (levelId === 'hub') return 'hub';
-  if (levelId === 'sandbox') return 'sandbox';
-  if (LAB_BY_ID[levelId]) return 'lab';
-  return 'campaign';
-}
 
 export function equippedGraphs(lib: MechanicLibrary): MechanicGraph[] {
   return lib.equipped.map((id) => lib.mechanics.find((m) => m.id === id)).filter((m): m is MechanicGraph => !!m);
 }
 
-/** Which parts a world allows: everything in the sandbox, the lab's list in a lab, unlocked tiers elsewhere. */
-export function rulesFor(mode: GameMode, levelId: string, progress: Progress): ValidateOptions {
-  if (mode === 'sandbox') return {};
-  if (mode === 'lab') {
-    const lab = LAB_BY_ID[levelId];
-    return lab ? { allowedTypes: lab.parts, maxBlocks: lab.maxBlocks } : {};
-  }
-  return { maxTier: unlockedTier(progress) };
-}
 
 const initialLibrary = loadLibrary();
 if (initialLibrary.mechanics.length === 0) {
@@ -119,7 +131,8 @@ export const useApp = create<AppState>((set, get) => {
   const hotReload = () => {
     const s = get();
     if (!runner.world) return;
-    runner.reloadMechanics(equippedGraphs(s.library), rulesFor(s.mode, s.levelId, s.progress));
+    if (s.trial) runner.reloadMechanics([s.trial.graph], {});
+    else runner.reloadMechanics(equippedGraphs(s.library), rulesFor(s.mode, s.levelId, s.progress));
   };
 
   return {
@@ -138,11 +151,67 @@ export const useApp = create<AppState>((set, get) => {
     progress: loadProgress(),
     settings: initialSettings,
     justUnlockedTier: null,
+    docs: { open: false, route: { kind: 'index' }, history: [] },
+    trial: null,
+    debugOverlay: false,
+
+    openDocs(route) {
+      const d = get().docs;
+      const next = route ?? (d.open ? d.route : { kind: 'index' });
+      const history = d.open && route ? [...d.history.slice(-30), d.route] : d.history;
+      set({ docs: { open: true, route: next, history } });
+    },
+
+    docsBack() {
+      const d = get().docs;
+      if (!d.history.length) return;
+      set({ docs: { open: true, route: d.history[d.history.length - 1], history: d.history.slice(0, -1) } });
+    },
+
+    closeDocs() {
+      set({ docs: { ...get().docs, open: false } });
+    },
+
+    tryExample(id) {
+      const ex = EXAMPLE_BY_ID[id];
+      if (ex) get().tryMechanic(ex.title, ex.build(), id);
+    },
+
+    tryMechanic(title, graph, id) {
+      if (returnTimer) clearTimeout(returnTimer);
+      returnTimer = null;
+      runner.load({ levelId: 'testbench', mode: 'sandbox', lawEnabled: true, mechanics: [graph], rules: {} });
+      runner.paused = false;
+      runner.input.releaseAll();
+      set({
+        screen: 'game',
+        levelId: 'testbench',
+        mode: 'sandbox',
+        law: true,
+        trial: { id, title, graph },
+        workshopOpen: false,
+        pauseOpen: false,
+        labPickerOpen: false,
+        docs: { ...get().docs, open: false },
+      });
+    },
+
+    addToShelf(g) {
+      const lib = get().library;
+      const copy: MechanicGraph = { ...JSON.parse(JSON.stringify(g)), id: uid('m'), created: Date.now(), updated: Date.now() };
+      persistLibrary({ ...lib, mechanics: [...lib.mechanics, copy] });
+      set({ selectedId: copy.id });
+      return copy.id;
+    },
+
+    setDebugOverlay(open) {
+      set({ debugOverlay: open });
+    },
 
     enterLevel(levelId) {
       if (returnTimer) clearTimeout(returnTimer);
       returnTimer = null;
-      set({ labPickerOpen: false });
+      set({ labPickerOpen: false, trial: null });
       const s = get();
       const mode = modeFor(levelId);
       runner.load({
@@ -164,6 +233,11 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     restartLevel() {
+      const trial = get().trial;
+      if (trial) {
+        get().tryMechanic(trial.title, trial.graph, trial.id);
+        return;
+      }
       runner.restart();
       set({ pauseOpen: false });
       runner.paused = get().workshopOpen;
@@ -294,6 +368,12 @@ export const useApp = create<AppState>((set, get) => {
       const next: History = { past: [...h.past.slice(-99), prev], future: [] };
       persistLibrary({ ...lib, mechanics: lib.mechanics.map((m) => (m.id === g.id ? g : m)) });
       set({ history: { ...get().history, [g.id]: next } });
+    },
+
+    saveQuietly(g) {
+      const lib = get().library;
+      if (!lib.mechanics.some((m) => m.id === g.id)) return;
+      persistLibrary({ ...lib, mechanics: lib.mechanics.map((m) => (m.id === g.id ? g : m)) });
     },
 
     undo() {

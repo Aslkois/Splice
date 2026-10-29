@@ -18,6 +18,8 @@ export type SpawnDef =
   | { type: 'cannon'; x: number; y: number; facing?: -1 | 1; tag?: string; hp?: number }
   | { type: 'target'; x: number; y: number; hp?: number; tag?: string }
   | { type: 'cell'; x: number; y: number; amount?: number }
+  /** A generator with a finite reserve that feeds your reservoir while you stand in its field. */
+  | { type: 'dynamo'; x: number; y: number; reserve: number; radius?: number }
   /** Rect hazards, x/y top-left. */
   | { type: 'spikes'; x: number; y: number; w: number; h?: number }
   | { type: 'goal'; x: number; y: number; w: number; h: number; tag?: string }

@@ -3,7 +3,7 @@ import type { Cannon, Turret, Walker } from '../sim/entities/enemies';
 import type { Entity } from '../sim/entities/Entity';
 import type { Player } from '../sim/entities/Player';
 import type { Projectile } from '../sim/entities/Projectile';
-import type { Cell, Crate, Door, Gate, Goal, Mover, Spikes, Target } from '../sim/entities/props';
+import type { Cell, Crate, Door, Dynamo, Gate, Goal, Mover, Spikes, Target } from '../sim/entities/props';
 import type { LevelDef } from '../sim/levels/types';
 import type { Vec } from '../sim/math';
 import { INK, mix, SIGNAL, WHITE, type Theme } from './palette';
@@ -531,6 +531,49 @@ export function drawCell(g: G, c: Cell, now: number): void {
     { x: p.x + 4, y: y - 1 },
     { x: p.x, y: y - 1 },
   ], INK, 1, false);
+}
+
+/** A generator pylon: its gauge shows the reserve left; a dashed ring marks the field. */
+export function drawDynamo(g: G, d: Dynamo, player: { x: number; y: number } | null, worldTime: number, now: number): void {
+  const p = d.pos;
+  const left = d.capacity > 0 ? d.reserve / d.capacity : 0;
+  const live = left > 0.001;
+  // field ring
+  const segs = 28;
+  for (let i = 0; i < segs; i += 2) {
+    const a0 = (i / segs) * Math.PI * 2 + now * 0.4;
+    const a1 = ((i + 1) / segs) * Math.PI * 2 + now * 0.4;
+    g.lineStyle(2, SIGNAL.yellow, live ? 0.35 : 0.1);
+    g.beginPath();
+    g.arc(p.x, p.y, d.radius, a0, a1);
+    g.strokePath();
+  }
+  // pylon
+  rrect(g, p.x - 18, p.y - 30, 36, 64, 6, 0x2b3140);
+  g.lineStyle(3, INK, 1);
+  g.strokeRoundedRect(p.x - 18, p.y - 30, 36, 64, 6);
+  rrect(g, p.x - 24, p.y + 30, 48, 8, 3, 0x1d222d);
+  // gauge
+  g.fillStyle(0x15161c, 1);
+  g.fillRect(p.x - 8, p.y - 22, 16, 46);
+  g.fillStyle(SIGNAL.yellow, live ? 0.9 : 0.25);
+  g.fillRect(p.x - 6, p.y - 20 + 42 * (1 - left), 12, 42 * left);
+  // coil on top
+  g.fillStyle(live ? SIGNAL.yellow : 0x5a5f6b, 1);
+  g.fillCircle(p.x, p.y - 38, 8 + (live ? Math.sin(now * 6) * 1.5 : 0));
+  g.lineStyle(3, INK, 1);
+  g.strokeCircle(p.x, p.y - 38, 8);
+  // beam while feeding
+  if (player && worldTime - d.feedingAt < 0.05) {
+    g.lineStyle(3, SIGNAL.yellow, 0.8);
+    g.beginPath();
+    g.moveTo(p.x, p.y - 38);
+    const mx = (p.x + player.x) / 2 + Math.sin(now * 40) * 8;
+    const my = (p.y - 38 + player.y) / 2 + Math.cos(now * 33) * 8;
+    g.lineTo(mx, my);
+    g.lineTo(player.x, player.y);
+    g.strokePath();
+  }
 }
 
 export function drawSpikes(g: G, s: Spikes): void {

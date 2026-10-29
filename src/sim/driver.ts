@@ -10,6 +10,7 @@ export type SimEventKind =
   | 'collision'
   | 'hit.incoming'
   | 'block.success'
+  | 'hit.resolved'
   | 'damage.taken'
   | 'entity.destroyed'
   | 'charge.interrupted'

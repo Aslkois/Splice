@@ -33,8 +33,10 @@ export const HUB: LevelDef = {
 };
 
 /**
- * Challenge 1. The far ledge is beyond what the built-in jump and dash can reach together.
- * Any mechanic that legitimately adds reach (air impulses, thrust, recoil, momentum tricks) works.
+ * Challenge 1. A 320 px gap down to a ledge 80 px lower: the built-in run, jump and ground dash
+ * reach at most ~245 px. Anything you build that adds air time or air speed gets you over — a
+ * double jump (≈ 17–24 E) clears it by 50–80 px, a home-made air dash (≈ 30–40 E) by 120+ px.
+ * See src/dev/campaignValidation.ts for the reference solutions.
  */
 export const C1: LevelDef = {
   id: 'c1',
@@ -48,7 +50,7 @@ export const C1: LevelDef = {
   solids: [
     { x: -40, y: 800, w: 820, h: 320, style: 'ground' },
     { x: -40, y: -300, w: 60, h: 1120, style: 'wall' },
-    { x: 1220, y: 880, w: 1120, h: 240, style: 'ground' },
+    { x: 1100, y: 880, w: 1240, h: 240, style: 'ground' },
     { x: 2280, y: -300, w: 60, h: 1200, style: 'wall' },
     { x: 330, y: 650, w: 140, h: 20, style: 'platform' },
   ],
@@ -63,8 +65,9 @@ export const C1: LevelDef = {
 };
 
 /**
- * Challenge 2. Two emplacements sit beyond a chasm, out of reach. Their bolts are the only
- * plentiful source of energy in the room.
+ * Challenge 2. Two emplacements sit beyond a chasm, out of reach. Each bolt they fire carries
+ * ~11.5 E; sent straight back it deals that much damage, so three clean reflections silence one.
+ * Two cells pay for other routes: amplified reflections, or shots of your own.
  */
 export const C2: LevelDef = {
   id: 'c2',
@@ -84,9 +87,11 @@ export const C2: LevelDef = {
     { x: 560, y: 640, w: 160, h: 20, style: 'platform' },
   ],
   spawns: [
-    { type: 'turret', x: 1446, y: 560, facing: -1, interval: 1.8, range: 1100, tag: 'sender' },
-    { type: 'turret', x: 1726, y: 400, facing: -1, interval: 2.3, range: 1300, tag: 'sender' },
+    { type: 'turret', x: 1446, y: 560, facing: -1, interval: 1.8, range: 1100, tag: 'sender', hp: 30 },
+    { type: 'turret', x: 1726, y: 400, facing: -1, interval: 2.3, range: 1300, tag: 'sender', hp: 30 },
     { type: 'crate', x: 640, y: 616 },
+    { type: 'cell', x: 600, y: 610 },
+    { type: 'cell', x: 330, y: 792 },
     { type: 'sign', x: 330, y: 560, text: 'They keep sending things. Send them back.', w: 380 },
   ],
   objective: { kind: 'destroy', tags: ['sender'], text: 'Silence both emplacements.' },
@@ -124,6 +129,39 @@ export const C3: LevelDef = {
     { type: 'sign', x: 520, y: 440, text: 'Nothing that hits this hard can be blocked. Probably.', w: 460 },
   ],
   objective: { kind: 'destroyThenReach', tags: ['judgement'], zoneTag: 'exit', text: 'Get out.' },
+};
+
+/**
+ * Where the docs' examples are tried: a gap and a ledge to jump, a target to strike, a crate, cells,
+ * a dynamo to charge beside, and a slow turret to parry. Sandbox rules, so you respawn on death.
+ */
+export const TESTBENCH: LevelDef = {
+  id: 'testbench',
+  name: 'Testbench',
+  subtitle: 'Try it out.',
+  theme: 'lab',
+  width: 2700,
+  height: 1100,
+  spawn: { x: 420, y: 740 },
+  startEnergy: 100,
+  solids: [
+    { x: -40, y: 800, w: 1340, h: 320, style: 'ground' },
+    { x: -40, y: -300, w: 60, h: 1120, style: 'wall' },
+    { x: 1620, y: 860, w: 1120, h: 260, style: 'ground' },
+    { x: 2680, y: -300, w: 60, h: 1180, style: 'wall' },
+    { x: 860, y: 640, w: 180, h: 20, style: 'platform' },
+    { x: 1040, y: 520, w: 120, h: 20, style: 'platform' },
+  ],
+  spawns: [
+    { type: 'dynamo', x: 200, y: 760, reserve: 600, radius: 150 },
+    { type: 'target', x: 620, y: 768, hp: 400 },
+    { type: 'crate', x: 760, y: 776 },
+    { type: 'cell', x: 950, y: 610 },
+    { type: 'cell', x: 1100, y: 490 },
+    { type: 'cell', x: 1900, y: 830 },
+    { type: 'turret', x: 2400, y: 836, facing: -1, interval: 2.6, range: 1250 },
+    { type: 'sign', x: 200, y: 640, text: 'Stand in the dynamo’s ring to refill.', w: 300 },
+  ],
 };
 
 /** Free-form physics playground. */
@@ -181,6 +219,7 @@ export const LEVELS: Record<string, LevelDef> = {
   c2: C2,
   c3: C3,
   sandbox: ARENA,
+  testbench: TESTBENCH,
   ...Object.fromEntries(LABS.map((l) => [l.id, l.level])),
 };
 

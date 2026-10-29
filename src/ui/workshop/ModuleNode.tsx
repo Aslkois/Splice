@@ -1,6 +1,7 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { memo } from 'react';
 import { previewCost } from '../../mechanics/costPreview';
+import { presentationOf } from '../../mechanics/presentation';
 import { getPrimitive, nodeTitle } from '../../mechanics/registry';
 import type { ParamValue, VecValue } from '../../mechanics/schema';
 import type { ParamDef, PortDef } from '../../mechanics/types';
@@ -85,6 +86,8 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
   const warning = issues.find((i) => i.severity === 'warning');
   const trace = ed.trace?.get(id);
   const locked = ed.isLocked(def.type);
+  const rank = def.event ? ed.rank(id) : null;
+  const bpTitle = presentationOf(def.type).blueprintTitle;
   const allExecOuts = def.execOut ?? [];
   // A single unnamed "then" lives in the header, opposite the flow input.
   const headOut = allExecOuts.length === 1 && !allExecOuts[0].label ? allExecOuts[0] : null;
@@ -93,7 +96,7 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
   const outputs = def.outputs ?? [];
 
   return (
-    <div className={`mod cat-${def.category} ${selected ? 'sel' : ''} ${error ? 'has-error' : ''} ${locked ? 'locked' : ''}`} data-type={def.type}>
+    <div className={`mod cat-${def.category} ${selected ? 'sel' : ''} ${error ? 'has-error' : ''} ${locked ? 'locked' : ''} ${ed.recent.has(id) ? 'recent' : ''}`} data-type={def.type}>
       <span className="screw tl" />
       <span className="screw tr" />
       <div className="mod-head">
@@ -104,9 +107,20 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
           </div>
         )}
         <span className="tape" title={def.description}>
-          {nodeTitle(def, node.params)}
+          {bpTitle && !def.title ? bpTitle : nodeTitle(def, node.params)}
         </span>
       </div>
+      {rank && (
+        <div className="mod-rank nodrag" title="Scripts on the same event run in this order">
+          runs {rank.rank} of {rank.of}
+          <button type="button" aria-label="Run earlier" disabled={rank.rank === 1} onClick={() => ed.moveHandler(id, -1)}>
+            ▲
+          </button>
+          <button type="button" aria-label="Run later" disabled={rank.rank === rank.of} onClick={() => ed.moveHandler(id, 1)}>
+            ▼
+          </button>
+        </div>
+      )}
 
       {(def.params?.length ?? 0) > 0 && (
         <div className="mod-params">

@@ -5,6 +5,7 @@ import {
   BackgroundVariant,
   Controls,
   ReactFlow,
+  SelectionMode,
   useReactFlow,
   type Connection,
   type EdgeChange,
@@ -14,7 +15,8 @@ import {
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { synth } from '../../audio/Synth';
 import { compileGraph } from '../../mechanics/compile';
-import { defaultParams, getPrimitive, inputPorts, outputPorts } from '../../mechanics/registry';
+import { addNode, connect, duplicateNodes, ensureBlueprintLayout, handlerRank, moveHandler, setLayout } from '../../mechanics/edit';
+import { getPrimitive, inputPorts, outputPorts } from '../../mechanics/registry';
 import type { NodeTrace } from '../../mechanics/runtime';
 import { uid, type GraphEdge, type MechanicGraph, type ParamValue, type PortType } from '../../mechanics/schema';
 import { checkConnection, type Issue, type ValidateOptions } from '../../mechanics/validate';
@@ -23,6 +25,7 @@ import { CableConnectionLine, CableEdge, type CableEdgeType } from './CableEdge'
 import { EditorContext, type EditorApi } from './editorContext';
 import { ModuleNode, type ModuleNodeType } from './ModuleNode';
 import { DRAG_MIME } from './PartsDrawer';
+import { compatiblePort, NodeSearch, type SearchFrom } from './NodeSearch';
 
 const nodeTypes = { module: ModuleNode };
 const edgeTypes = { cable: CableEdge };
@@ -34,7 +37,7 @@ function portTypeOf(graph: MechanicGraph, nodeId: string, portId: string, side: 
   return (side === 'out' ? outputPorts(def) : inputPorts(def)).find((p) => p.id === portId)?.type;
 }
 
-function toFlowEdges(g: MechanicGraph): CableEdgeType[] {
+function toFlowEdges(g: MechanicGraph, active: Set<string> = new Set()): CableEdgeType[] {
   return g.edges.map((e) => ({
     id: e.id,
     source: e.from,
@@ -42,13 +45,14 @@ function toFlowEdges(g: MechanicGraph): CableEdgeType[] {
     target: e.to,
     targetHandle: e.toPort,
     type: 'cable',
-    data: { portType: portTypeOf(g, e.from, e.fromPort, 'out') ?? 'exec' },
+    data: { portType: portTypeOf(g, e.from, e.fromPort, 'out') ?? 'exec', active: active.has(`${e.from}:${e.fromPort}`) },
   }));
 }
 
 function toFlowNodes(g: MechanicGraph, prev: ModuleNodeType[] = []): ModuleNodeType[] {
   const sel = new Set(prev.filter((n) => n.selected).map((n) => n.id));
-  return g.nodes.map((n) => ({ id: n.id, type: 'module', position: { x: n.x, y: n.y }, data: { type: n.type }, selected: sel.has(n.id) }));
+  const laid = ensureBlueprintLayout(g);
+  return g.nodes.map((n) => ({ id: n.id, type: 'module', position: { ...laid.layout.blueprint[n.id] }, data: { type: n.type }, selected: sel.has(n.id) }));
 }
 
 export interface GraphEditorHandle {
@@ -62,14 +66,25 @@ interface Props {
   trace: Map<string, NodeTrace> | undefined;
   onCommit: (g: MechanicGraph) => void;
   onToast: (msg: string) => void;
+  onSelect?: (id: string | null) => void;
+  /** Blocks that just ran, and the flow outputs they took ("node:port"). */
+  recent?: Set<string>;
+  recentPorts?: Set<string>;
 }
 
 let clipboard: { nodes: MechanicGraph['nodes']; edges: GraphEdge[] } | null = null;
 
-export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEditor({ graph, rules, trace, onCommit, onToast }, ref) {
+const NONE = new Set<string>();
+
+export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEditor(
+  { graph, rules, trace, onCommit, onToast, onSelect, recent = NONE, recentPorts = NONE },
+  ref,
+) {
   const rf = useReactFlow<ModuleNodeType, CableEdgeType>();
   const [nodes, setNodes] = useState<ModuleNodeType[]>(() => toFlowNodes(graph));
-  const [edges, setEdges] = useState<CableEdgeType[]>(() => toFlowEdges(graph));
+  const [edges, setEdges] = useState<CableEdgeType[]>(() => toFlowEdges(graph, recentPorts));
+  const [search, setSearch] = useState<{ at: { x: number; y: number }; flow: { x: number; y: number }; from: (SearchFrom & { node: string; port: string }) | null } | null>(null);
+  const mouse = useRef({ x: 0, y: 0 });
   const synced = useRef(graph);
   const lastInvalid = useRef<string | null>(null);
   const wrapper = useRef<HTMLDivElement>(null);
@@ -80,7 +95,7 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
     const switched = graph.id !== synced.current.id;
     synced.current = graph;
     setNodes((prev) => toFlowNodes(graph, switched ? [] : prev));
-    setEdges(toFlowEdges(graph));
+    setEdges(toFlowEdges(graph, recentPorts));
     if (switched) requestAnimationFrame(() => rf.fitView({ padding: 0.25, maxZoom: 1 }));
   }, [graph, rf]);
 
@@ -123,17 +138,25 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
       trace,
       setParam,
       isLocked: (type: string) => partLocked(type, rules),
+      recent,
+      rank: (id: string) => handlerRank(graph, id),
+      moveHandler: (id: string, dir: -1 | 1) => {
+        const next = moveHandler(synced.current, id, dir);
+        if (next !== synced.current) {
+          commit(next);
+          synth.uiClick();
+        }
+      },
     }),
-    [graph, connectedInputs, issuesByNode, trace, setParam, rules],
+    [graph, connectedInputs, issuesByNode, trace, setParam, rules, recent, commit],
   );
 
   const addNodeAt = useCallback(
     (type: string, pos: { x: number; y: number }) => {
       const def = getPrimitive(type);
       if (!def) return;
-      const g = synced.current;
-      const id = uid('n');
-      commit({ ...g, nodes: [...g.nodes, { id, type, x: Math.round(pos.x), y: Math.round(pos.y), params: defaultParams(def) }] });
+      const { graph: next, id } = addNode(synced.current, type, { at: { editor: 'blueprint', pos } });
+      commit(next);
       setNodes((prev) => [...prev.map((n) => ({ ...n, selected: false })), { id, type: 'module', position: pos, data: { type }, selected: true }]);
       synth.uiDrop();
     },
@@ -165,15 +188,13 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
 
   const onNodeDragStop = useCallback(() => {
     const g = synced.current;
-    const pos = new Map(rf.getNodes().map((n) => [n.id, n.position]));
-    let moved = false;
-    const next = g.nodes.map((n) => {
-      const p = pos.get(n.id);
-      if (!p || (Math.round(p.x) === n.x && Math.round(p.y) === n.y)) return n;
-      moved = true;
-      return { ...n, x: Math.round(p.x), y: Math.round(p.y) };
-    });
-    if (moved) commit({ ...g, nodes: next });
+    const changed: Record<string, { x: number; y: number }> = {};
+    for (const n of rf.getNodes()) {
+      const old = g.layout.blueprint[n.id];
+      const p = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
+      if (!old || old.x !== p.x || old.y !== p.y) changed[n.id] = p;
+    }
+    if (Object.keys(changed).length) commit(setLayout(g, 'blueprint', changed));
   }, [commit, rf]);
 
   const onDelete = useCallback(
@@ -235,14 +256,51 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
   );
 
   const onConnectEnd = useCallback(
-    (_e: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+    (e: MouseEvent | TouchEvent, state: FinalConnectionState) => {
       if (!state.isValid && state.toHandle && lastInvalid.current) {
         onToast(lastInvalid.current);
         synth.uiError();
+      } else if (!state.toHandle && state.fromNode && state.fromHandle?.id) {
+        // Dropped on empty space: offer the blocks that could plug into this wire.
+        const p = 'changedTouches' in e ? e.changedTouches[0] : e;
+        const side = state.fromHandle.type === 'source' ? 'out' : 'in';
+        const type = portTypeOf(synced.current, state.fromNode.id, state.fromHandle.id, side);
+        if (type)
+          setSearch({
+            at: { x: p.clientX, y: p.clientY },
+            flow: rf.screenToFlowPosition({ x: p.clientX, y: p.clientY }),
+            from: { side, type, node: state.fromNode.id, port: state.fromHandle.id },
+          });
       }
       lastInvalid.current = null;
     },
-    [onToast],
+    [onToast, rf],
+  );
+
+  const pickFromSearch = useCallback(
+    (type: string) => {
+      const s = search;
+      setSearch(null);
+      if (!s) return;
+      const def = getPrimitive(type);
+      if (!def) return;
+      const pos = { x: s.flow.x - (s.from?.side === 'in' ? 230 : 10), y: s.flow.y - 30 };
+      const { graph: g1, id } = addNode(synced.current, type, { at: { editor: 'blueprint', pos } });
+      let g = g1;
+      if (s.from) {
+        const port = compatiblePort(def, s.from);
+        if (port) {
+          const r = s.from.side === 'out' ? connect(g, s.from.node, s.from.port, id, port) : connect(g, id, port, s.from.node, s.from.port);
+          if (r.ok) g = r.graph;
+          else onToast(r.reason);
+        }
+      }
+      commit(g);
+      setNodes((prev) => [...prev.map((n) => ({ ...n, selected: false })), { id, type: 'module', position: pos, data: { type }, selected: true }]);
+      setEdges(toFlowEdges(g, recentPorts));
+      synth.uiDrop();
+    },
+    [search, commit, onToast, recentPorts],
   );
 
   const onEdgeDoubleClick = useCallback(
@@ -269,6 +327,11 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return;
+      if (e.key === ' ' && !e.ctrlKey && !e.metaKey && wrapper.current?.matches(':hover')) {
+        e.preventDefault();
+        setSearch({ at: { ...mouse.current }, flow: rf.screenToFlowPosition(mouse.current), from: null });
+        return;
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey) {
         const dn = rf.getNodes().filter((n) => n.selected);
         const de = rf.getEdges().filter((ed) => ed.selected);
@@ -293,12 +356,10 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
       if ((k === 'v' || k === 'd') && clipboard) {
         e.preventDefault();
         const g = synced.current;
-        const map = new Map(clipboard.nodes.map((n) => [n.id, uid('n')]));
-        const nn = clipboard.nodes.map((n) => ({ ...n, id: map.get(n.id)!, x: n.x + 40, y: n.y + 40, params: { ...n.params } }));
-        const ne = clipboard.edges.map((ed) => ({ ...ed, id: uid('e'), from: map.get(ed.from)!, to: map.get(ed.to)! }));
-        const next = { ...g, nodes: [...g.nodes, ...nn], edges: [...g.edges, ...ne] };
+        const { graph: next, map } = duplicateNodes(g, clipboard.nodes.map((n) => n.id).filter((id) => g.nodes.some((n) => n.id === id)));
+        const fresh = new Set(map.values());
         commit(next);
-        setNodes(toFlowNodes(next).map((n) => ({ ...n, selected: map.has(n.id) ? false : nn.some((x) => x.id === n.id) })));
+        setNodes(toFlowNodes(next).map((n) => ({ ...n, selected: fresh.has(n.id) })));
         setEdges(toFlowEdges(next));
         synth.uiDrop();
       }
@@ -309,7 +370,15 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
 
   return (
     <EditorContext.Provider value={api}>
-      <div className="mat" ref={wrapper} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <div
+        className="mat"
+        ref={wrapper}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+        onPointerMove={(e) => {
+          mouse.current = { x: e.clientX, y: e.clientY };
+        }}
+      >
         <ReactFlow<ModuleNodeType, CableEdgeType>
           nodes={nodes}
           edges={edges}
@@ -322,10 +391,18 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}
           onEdgeDoubleClick={onEdgeDoubleClick}
+          onSelectionChange={({ nodes: sel }) => onSelect?.(sel[0]?.id ?? null)}
           isValidConnection={isValidConnection}
           connectionLineComponent={CableConnectionLine}
           deleteKeyCode={null}
           multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
+          selectionOnDrag
+          selectionMode={SelectionMode.Partial}
+          panOnDrag={[1, 2]}
+          onPaneContextMenu={(e) => {
+            e.preventDefault();
+            setSearch({ at: { x: e.clientX, y: e.clientY }, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }), from: null });
+          }}
           fitView
           fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
           minZoom={0.25}
@@ -338,12 +415,13 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
           <Background id="major" variant={BackgroundVariant.Lines} gap={120} lineWidth={2} color="#436a51" />
           <Controls showInteractive={false} position="bottom-right" />
         </ReactFlow>
+        {search && <NodeSearch at={search.at} from={search.from} rules={rules} onPick={pickFromSearch} onClose={() => setSearch(null)} />}
         {graph.nodes.length === 0 && (
           <div className="mat-empty">
             <p>Every mechanic starts with an event.</p>
             <p>
-              Drag <b>On Key Pressed</b> onto the mat, then an action such as <b>Apply Impulse</b>, and plug the white jack of one into the other.
-              Close the workbench to try it.
+              Drag <b>On Key Pressed</b> onto the mat (or right-click / press Space to search), then an action such as <b>Apply Impulse</b>, and
+              plug the white arrow of one into the other. Drop a wire on empty space to see what fits it. Close the workbench to try it.
             </p>
           </div>
         )}

@@ -153,10 +153,11 @@ export const EVENTS: PrimitiveDef[] = [
   },
   {
     type: 'on.successfulBlock',
-    label: 'On Successful Block',
+    label: 'On Guarded Hit',
     category: 'event',
     tier: 1,
-    description: 'Fires when an incoming hit meets a guard that was already up. The hit is still open.',
+    description:
+      'Fires when an incoming hit meets a guard that was raised before it arrived — still BEFORE damage, right after every On Incoming Hit handler. The hit is open, so defensive actions here change the outcome.',
     execOut: THEN,
     outputs: hitOutputs,
     event: {
@@ -166,11 +167,53 @@ export const EVENTS: PrimitiveDef[] = [
     },
   },
   {
+    type: 'on.hitResolved',
+    label: 'On Hit Resolved',
+    category: 'event',
+    tier: 1,
+    description:
+      'Fires once for every hit on you after it has been fully resolved and its damage applied — including hits that were prevented or redirected. Too late to change that hit; use it to react.',
+    execOut: THEN,
+    outputs: [
+      { id: 'damage', label: 'Damage Taken', type: 'number' },
+      { id: 'guarded', label: 'Was Guarded', type: 'boolean' },
+      { id: 'redirected', label: 'Was Redirected', type: 'boolean' },
+      { id: 'prevented', label: 'Was Prevented', type: 'boolean' },
+      { id: 'absorbed', label: 'Absorbed E', type: 'number' },
+      { id: 'attacker', label: 'Attacker', type: 'entity' },
+      { id: 'killed', label: 'Was Lethal', type: 'boolean' },
+    ],
+    event: {
+      kind: 'hit.resolved',
+      data: (ctx, port) => {
+        const h = ctx.hit;
+        if (!h) return port === 'damage' || port === 'absorbed' || port === 'attacker' ? 0 : false;
+        switch (port) {
+          case 'damage':
+            return h.finalDamage;
+          case 'guarded':
+            return h.guarded;
+          case 'redirected':
+            return h.redirected;
+          case 'prevented':
+            return h.prevented;
+          case 'absorbed':
+            return h.absorbedEnergy;
+          case 'attacker':
+            return h.attackerId ?? 0;
+          case 'killed':
+            return h.lethal;
+        }
+        return 0;
+      },
+    },
+  },
+  {
     type: 'on.damageTaken',
     label: 'On Damage Taken',
     category: 'event',
     tier: 1,
-    description: 'Fires after health damage has landed.',
+    description: 'Fires after health damage has been applied (only when more than 0 damage got through). Queued: it runs at the next flush, never during the hit.',
     execOut: THEN,
     outputs: [
       { id: 'amount', label: 'Amount', type: 'number' },

@@ -1,6 +1,7 @@
 import { runner } from '../game/bridge';
 import { telemetry } from '../game/telemetry';
 import { useApp } from '../store/store';
+import { EXAMPLE_BY_ID } from '../docs/examples';
 
 /**
  * Read-mostly hooks for automated browser tests and curious players (window.__SPLICE__).
@@ -11,6 +12,8 @@ export function installDebugHooks(): void {
     runner,
     app: useApp,
     telemetry,
+    /** The docs' worked examples (ordinary mechanics), for scripted playthroughs. */
+    examples: EXAMPLE_BY_ID,
     press: (k: string) => runner.input.press(k),
     release: (k: string) => runner.input.release(k),
     state: () => {

@@ -10,6 +10,7 @@ export type EntityKind =
   | 'crate'
   | 'target'
   | 'cell'
+  | 'dynamo'
   | 'projectile'
   | 'spikes'
   | 'goal'

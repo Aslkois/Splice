@@ -161,6 +161,12 @@ export function HUD() {
         <span>
           <span className="kbd">Esc</span> pause
         </span>
+        <button type="button" className="hint-btn" onClick={() => useApp.getState().setDebugOverlay(!useApp.getState().debugOverlay)}>
+          <span className="kbd">`</span> debugger
+        </button>
+        <button type="button" className="hint-btn" onClick={() => useApp.getState().openDocs()}>
+          <span className="kbd">F1</span> docs
+        </button>
       </div>
     </div>
   );

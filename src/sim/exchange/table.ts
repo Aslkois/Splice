@@ -6,19 +6,32 @@
 //   Health (HP)     — damage. Converted from kinetic energy at impact, or bought with energy for strikes.
 //   Stamina (ST)    — the body's precision/strain budget. Regenerates, but can NEVER be turned into energy.
 //   Time (s)        — an opportunity cost only. Windups, channel rates and recovery spend it; nothing stores it.
+//
+// There is no cap on how much an effect may cost. An effect is paid in full at the moment it happens,
+// from energy released out of charges first, then from the battery (the reservoir). Anything bigger
+// than the reservoir has to be committed to a charge over time from real sources first.
 
 export interface ExchangeTable {
-  version: 1;
+  version: 2;
+  /** The reservoir: energy held at one instant. */
   energy: { capacity: number; start: number };
   stamina: { max: number; regenPerSec: number; regenDelay: number };
   power: {
-    /** Max energy drawn straight from the battery per tick. Larger effects must be channelled first. */
-    burstPerTick: number;
-    /** Energy per second a channel can move from battery into a charge. */
+    /** Energy per second a channel can move from the reservoir into a charge (a rate, not a cap). */
     channelRate: number;
   };
+  /** Preparation makes effects more efficient, with diminishing returns (see windupFactor). */
+  windup: {
+    /** The most a windup can ever save (fraction). The cost never drops below 1 − maxSaving. */
+    maxSaving: number;
+    /** Seconds of preparation that achieve ~63% of the maximum saving. */
+    timeConstant: number;
+  };
   impulse: {
+    /** Efficiency of pushing other bodies (transmission losses). */
     efficiency: number;
+    /** Efficiency of pushing your own body: no transmission, so nothing is lost. */
+    selfEfficiency: number;
     /** Linear momentum cost: keeps continuous thrust from being nearly free. */
     linearPerMu: number;
     /** Distance (px) at which remote impulses start costing more. */
@@ -31,6 +44,7 @@ export interface ExchangeTable {
     efficiency: number;
     linearPerMu: number;
     minMass: number;
+    /** Numerical safety bound for the simulation, not a balance rule. */
     maxMass: number;
     minSpeed: number;
     lifetime: number;
@@ -55,7 +69,6 @@ export interface ExchangeTable {
     staminaPerHitEnergy: number;
     /** Energy efficiency for amplification beyond the reused impulse. */
     amplifyEfficiency: number;
-    maxAmplify: number;
   };
   prevent: {
     /** Dissipating damage that was not redirected costs energy per HP. */
@@ -65,18 +78,28 @@ export interface ExchangeTable {
   };
   reduce: { energyPerHp: number };
   absorb: { efficiency: number; staminaPerEnergy: number };
-  charge: { interruptLoss: number; interruptThreshold: number };
-  pickups: { cellEnergy: number };
+  charge: {
+    /** Fraction of a charge that scatters (is lost) when you are hurt while channelling. */
+    interruptLoss: number;
+    /** Damage in one hit that breaks channelling and windups. */
+    interruptThreshold: number;
+  };
+  pickups: {
+    cellEnergy: number;
+    /** Energy per second a dynamo feeds into a reservoir standing in its field. */
+    dynamoRate: number;
+  };
 }
 
 export const DEFAULT_EXCHANGE: ExchangeTable = {
-  version: 1,
+  version: 2,
   energy: { capacity: 100, start: 40 },
   stamina: { max: 100, regenPerSec: 26, regenDelay: 0.55 },
-  power: { burstPerTick: 40, channelRate: 30 },
-  impulse: { efficiency: 0.85, linearPerMu: 0.5, freeRange: 140, rangeFalloff: 220 },
+  power: { channelRate: 40 },
+  windup: { maxSaving: 0.4, timeConstant: 2 },
+  impulse: { efficiency: 0.85, selfEfficiency: 1, linearPerMu: 0.5, freeRange: 140, rangeFalloff: 220 },
   strike: { energyPerHp: 1.0, reach: 96, knockbackShare: 0.35 },
-  projectile: { efficiency: 0.8, linearPerMu: 0.5, minMass: 0.05, maxMass: 25, minSpeed: 60, lifetime: 4 },
+  projectile: { efficiency: 0.8, linearPerMu: 0.5, minMass: 0.05, maxMass: 500, minSpeed: 60, lifetime: 4 },
   damage: { hpPerEnergy: 1.0 },
   guard: {
     activateStamina: 6,
@@ -92,13 +115,12 @@ export const DEFAULT_EXCHANGE: ExchangeTable = {
     staminaPerAgeSq: 60,
     staminaPerHitEnergy: 0.01,
     amplifyEfficiency: 0.75,
-    maxAmplify: 4,
   },
   prevent: { energyPerHp: 1.5, afterRedirectEnergy: 3 },
   reduce: { energyPerHp: 1.5 },
   absorb: { efficiency: 0.6, staminaPerEnergy: 0.15 },
   charge: { interruptLoss: 0.5, interruptThreshold: 4 },
-  pickups: { cellEnergy: 35 },
+  pickups: { cellEnergy: 35, dynamoRate: 45 },
 };
 
 export function cloneTable(t: ExchangeTable = DEFAULT_EXCHANGE): ExchangeTable {
