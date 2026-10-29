@@ -1,7 +1,8 @@
 import { createContext, useContext } from 'react';
 import type { NodeTrace } from '../../mechanics/runtime';
 import type { GraphNode, MechanicGraph, ParamValue } from '../../mechanics/schema';
-import type { Issue } from '../../mechanics/validate';
+import { getPrimitive } from '../../mechanics/registry';
+import type { Issue, ValidateOptions } from '../../mechanics/validate';
 
 export interface EditorApi {
   graph: MechanicGraph;
@@ -11,7 +12,7 @@ export interface EditorApi {
   issuesByNode: Map<string, Issue[]>;
   trace: Map<string, NodeTrace> | undefined;
   setParam: (nodeId: string, key: string, value: ParamValue) => void;
-  maxTier: number | undefined;
+  isLocked: (type: string) => boolean;
 }
 
 export const EditorContext = createContext<EditorApi | null>(null);
@@ -27,3 +28,10 @@ export const TIER_SOURCE: Record<number, string> = {
   2: 'Return to Sender',
   3: 'Survive the Impossible',
 };
+
+/** Is a part unavailable under these rules (lab list, or campaign tier)? */
+export function partLocked(type: string, rules: ValidateOptions): boolean {
+  if (rules.allowedTypes) return !rules.allowedTypes.includes(type);
+  const def = getPrimitive(type);
+  return !!def && rules.maxTier != null && def.tier > rules.maxTier;
+}

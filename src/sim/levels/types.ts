@@ -30,7 +30,9 @@ export type SpawnDef =
 export type ObjectiveDef =
   | { kind: 'reach'; zoneTag: string; text: string }
   | { kind: 'destroy'; tags: string[]; text: string }
-  | { kind: 'destroyThenReach'; tags: string[]; zoneTag: string; text: string };
+  | { kind: 'destroyThenReach'; tags: string[]; zoneTag: string; text: string }
+  /** Hold at least this much energy in the battery, alive. */
+  | { kind: 'charge'; energy: number; text: string };
 
 export type LevelTheme = 'workshop' | 'lab' | 'foundry';
 

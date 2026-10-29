@@ -129,7 +129,7 @@ try {
 
   // ---- walk to the first door ---------------------------------------------------------------
   await key('KeyD', 'keydown');
-  await page.waitForFunction(() => window.__SPLICE__.state().pos.x > 1075, null, { timeout: 8000 });
+  await page.waitForFunction(() => window.__SPLICE__.state().pos.x > 1048, null, { timeout: 8000 });
   await key('KeyD', 'keyup');
   await page.waitForTimeout(250);
   await key('KeyE', 'keydown');
@@ -185,6 +185,29 @@ try {
   const doorLocked = await page.evaluate(() => window.__SPLICE__.runner.world.entities.find((e) => e.kind === 'door' && e.target === 'c2').locked);
   check('second door unlocked after solving the first', hub.level === 'hub' && doorLocked === false);
   await page.screenshot({ path: OUT + 'hub-after.png' });
+
+  // ---- the Challenge Lab door opens the lab list, and a lab enforces its rules -----------------
+  await key('KeyD', 'keydown');
+  await page.waitForFunction(() => window.__SPLICE__.state().pos.x > 1712, null, { timeout: 30000 });
+  await key('KeyD', 'keyup');
+  await page.waitForTimeout(250);
+  await key('KeyE', 'keydown');
+  await page.waitForTimeout(60);
+  await key('KeyE', 'keyup');
+  const picker = await page.waitForSelector('.lab-panel', { timeout: 3000 }).then(() => true).catch(() => false);
+  check('Challenge Lab door opens the lab list', picker);
+  await page.screenshot({ path: OUT + 'lab-picker.png' });
+  await page.locator('.lab', { hasText: 'Two Blocks' }).locator('text=Enter').click();
+  await page.waitForTimeout(400);
+  const labState = await page.evaluate(() => {
+    const r = window.__SPLICE__.runner;
+    return { mode: r.world.mode, rejected: r.attach.rejected.map((m) => m.issues.map((i) => i.message).join(' ')) };
+  });
+  check(
+    'a lab refuses mechanics that break its rules',
+    labState.mode === 'lab' && labState.rejected.some((m) => /not allowed in this lab|lab allows/.test(m)),
+    labState.rejected.join(' | '),
+  );
 } catch (e) {
   check('unexpected failure', false, e.message);
   await page.screenshot({ path: OUT + 'failure.png' }).catch(() => {});

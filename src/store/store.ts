@@ -9,11 +9,15 @@ import {
   saveLibrary,
   saveProgress,
   saveSettings,
+  betterLabScore,
   unlockedTier,
+  type LabScore,
   type Progress,
   type Settings,
 } from '../persistence/storage';
+import type { ValidateOptions } from '../mechanics/validate';
 import { Door } from '../sim/entities/props';
+import { LAB_BY_ID } from '../sim/levels/labs';
 import type { GameMode } from '../sim/World';
 
 export type Screen = 'title' | 'game';
@@ -32,6 +36,9 @@ export interface AppState {
   workshopOpen: boolean;
   pauseOpen: boolean;
   settingsOpen: boolean;
+  labPickerOpen: boolean;
+  /** Result of the lab run just finished, for the picker to show. */
+  lastLabResult: { id: string; score: LabScore; best: boolean } | null;
   library: MechanicLibrary;
   selectedId: string | null;
   history: Record<string, History>;
@@ -48,6 +55,8 @@ export interface AppState {
   toggleWorkshop(): void;
   setPause(open: boolean): void;
   setSettingsOpen(open: boolean): void;
+  setLabPickerOpen(open: boolean): void;
+  completeLab(levelId: string, score: LabScore): void;
   setLaw(on: boolean): void;
   setSettings(patch: Partial<Settings>): void;
 
@@ -68,15 +77,24 @@ export interface AppState {
 }
 
 export function modeFor(levelId: string): GameMode {
-  return levelId === 'hub' ? 'hub' : levelId === 'sandbox' ? 'sandbox' : 'campaign';
+  if (levelId === 'hub') return 'hub';
+  if (levelId === 'sandbox') return 'sandbox';
+  if (LAB_BY_ID[levelId]) return 'lab';
+  return 'campaign';
 }
 
 export function equippedGraphs(lib: MechanicLibrary): MechanicGraph[] {
   return lib.equipped.map((id) => lib.mechanics.find((m) => m.id === id)).filter((m): m is MechanicGraph => !!m);
 }
 
-function tierFor(mode: GameMode, progress: Progress): number | undefined {
-  return mode === 'sandbox' ? undefined : unlockedTier(progress);
+/** Which parts a world allows: everything in the sandbox, the lab's list in a lab, unlocked tiers elsewhere. */
+export function rulesFor(mode: GameMode, levelId: string, progress: Progress): ValidateOptions {
+  if (mode === 'sandbox') return {};
+  if (mode === 'lab') {
+    const lab = LAB_BY_ID[levelId];
+    return lab ? { allowedTypes: lab.parts, maxBlocks: lab.maxBlocks } : {};
+  }
+  return { maxTier: unlockedTier(progress) };
 }
 
 const initialLibrary = loadLibrary();
@@ -101,7 +119,7 @@ export const useApp = create<AppState>((set, get) => {
   const hotReload = () => {
     const s = get();
     if (!runner.world) return;
-    runner.reloadMechanics(equippedGraphs(s.library), tierFor(s.mode, s.progress));
+    runner.reloadMechanics(equippedGraphs(s.library), rulesFor(s.mode, s.levelId, s.progress));
   };
 
   return {
@@ -112,6 +130,8 @@ export const useApp = create<AppState>((set, get) => {
     workshopOpen: false,
     pauseOpen: false,
     settingsOpen: false,
+    labPickerOpen: false,
+    lastLabResult: null,
     library: initialLibrary,
     selectedId: initialLibrary.mechanics[0]?.id ?? null,
     history: {},
@@ -122,6 +142,7 @@ export const useApp = create<AppState>((set, get) => {
     enterLevel(levelId) {
       if (returnTimer) clearTimeout(returnTimer);
       returnTimer = null;
+      set({ labPickerOpen: false });
       const s = get();
       const mode = modeFor(levelId);
       runner.load({
@@ -129,7 +150,7 @@ export const useApp = create<AppState>((set, get) => {
         mode,
         lawEnabled: mode === 'sandbox' ? s.law : true,
         mechanics: equippedGraphs(s.library),
-        maxTier: tierFor(mode, s.progress),
+        rules: rulesFor(mode, levelId, s.progress),
       });
       runner.paused = s.workshopOpen || s.pauseOpen;
       set({ screen: 'game', levelId, mode, pauseOpen: false });
@@ -181,6 +202,28 @@ export const useApp = create<AppState>((set, get) => {
 
     setSettingsOpen(open) {
       set({ settingsOpen: open });
+    },
+
+    setLabPickerOpen(open) {
+      runner.paused = open || get().workshopOpen || get().pauseOpen;
+      if (open) runner.input.releaseAll();
+      set({ labPickerOpen: open });
+    },
+
+    completeLab(levelId, score) {
+      const p = get().progress;
+      const best = betterLabScore(score, p.labs[levelId]);
+      const progress = { ...p, labs: best ? { ...p.labs, [levelId]: score } : p.labs };
+      saveProgress(progress);
+      set({ progress, lastLabResult: { id: levelId, score, best } });
+      if (returnTimer) clearTimeout(returnTimer);
+      returnTimer = setTimeout(() => {
+        returnTimer = null;
+        if (get().screen === 'game' && get().levelId === levelId && !get().workshopOpen) {
+          get().enterLevel('hub');
+          get().setLabPickerOpen(true);
+        }
+      }, 2600);
     },
 
     setLaw(on) {
@@ -303,7 +346,7 @@ export const useApp = create<AppState>((set, get) => {
       const before = unlockedTier(p);
       const completed = p.completed.includes(levelId) ? p.completed : [...p.completed, levelId];
       const best = { ...p.best, [levelId]: Math.min(p.best[levelId] ?? Infinity, time) };
-      const progress = { completed, best };
+      const progress = { ...p, completed, best };
       saveProgress(progress);
       const after = unlockedTier(progress);
       set({ progress, justUnlockedTier: after > before ? after : get().justUnlockedTier });
@@ -315,7 +358,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     resetProgress() {
-      const progress = { completed: [], best: {} };
+      const progress = { completed: [], best: {}, labs: {} };
       saveProgress(progress);
       set({ progress });
     },
@@ -331,7 +374,8 @@ setRunnerHooks({
           synth.uiError();
           return;
         }
-        s.enterLevel(req.target);
+        if (req.target === 'lab') s.setLabPickerOpen(true);
+        else s.enterLevel(req.target);
         break;
       case 'bench':
         s.openWorkshop();
@@ -341,6 +385,12 @@ setRunnerHooks({
         break;
       case 'complete':
         if (modeFor(req.levelId) === 'campaign') s.completeLevel(req.levelId, runner.world.time);
+        else if (modeFor(req.levelId) === 'lab')
+          s.completeLab(req.levelId, {
+            blocks: runner.attach.compiled.reduce((n, c) => n + c.nodes.size, 0),
+            energy: runner.world.exchange.totalSpent,
+            time: runner.world.time,
+          });
         break;
     }
   },

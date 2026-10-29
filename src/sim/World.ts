@@ -15,7 +15,7 @@ import { anyPressed, BINDINGS, type InputFrame } from './input';
 import type { LevelDef, SpawnDef } from './levels/types';
 import { dist, dot, len, norm, Rng, sub, type Vec } from './math';
 
-export type GameMode = 'campaign' | 'sandbox' | 'hub' | 'test';
+export type GameMode = 'campaign' | 'sandbox' | 'hub' | 'lab' | 'test';
 
 export interface WorldOptions {
   level: LevelDef;
@@ -119,12 +119,13 @@ export class World {
   // ---------------------------------------------------------------- rules
 
   /** Campaign always enforces the law; only the sandbox (and tests) may lift it. */
+  /** Only the sandbox (and tests) may run without the law. */
   get lawEnabled(): boolean {
-    return this.mode === 'campaign' || this.mode === 'hub' ? true : this._law;
+    return this.mode === 'sandbox' || this.mode === 'test' ? this._law : true;
   }
 
   setLaw(on: boolean): boolean {
-    if (this.mode === 'campaign' || this.mode === 'hub') return false;
+    if (this.mode !== 'sandbox' && this.mode !== 'test') return false;
     this._law = on;
     return true;
   }
@@ -660,7 +661,7 @@ export class World {
     const p = this.player;
     if (!p || p.alive || p.deadAt < 0) return;
     if (this.time - p.deadAt < PLAYER.respawnDelay) return;
-    if (this.mode === 'campaign') {
+    if (this.mode === 'campaign' || this.mode === 'lab') {
       if (!this.requests.some((r) => r.type === 'restart')) this.requests.push({ type: 'restart' });
       p.deadAt = Infinity;
     } else this.respawnPlayer();
@@ -677,12 +678,21 @@ export class World {
       this.objective.reachedZone = !!p?.alive && this.entities.some((e) => e instanceof Goal && e.tag === obj.zoneTag && e.reached);
     }
     for (const e of this.entities) if (e instanceof Goal) e.reached = false;
-    const done =
-      obj.kind === 'reach'
-        ? this.objective.reachedZone
-        : obj.kind === 'destroy'
-          ? this.objective.destroyedTags && !!p?.alive
-          : this.objective.destroyedTags && this.objective.reachedZone;
+    let done: boolean;
+    switch (obj.kind) {
+      case 'reach':
+        done = this.objective.reachedZone;
+        break;
+      case 'destroy':
+        done = this.objective.destroyedTags && !!p?.alive;
+        break;
+      case 'destroyThenReach':
+        done = this.objective.destroyedTags && this.objective.reachedZone;
+        break;
+      case 'charge':
+        done = !!p?.alive && p.account.energy >= obj.energy - 1e-6;
+        break;
+    }
     if (done) {
       this.objective.done = true;
       this.objective.doneAt = this.time;

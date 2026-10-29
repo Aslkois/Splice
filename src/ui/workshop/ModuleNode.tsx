@@ -82,7 +82,7 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
   const error = issues.find((i) => i.severity === 'error');
   const warning = issues.find((i) => i.severity === 'warning');
   const trace = ed.trace?.get(id);
-  const locked = ed.maxTier != null && def.tier > ed.maxTier;
+  const locked = ed.isLocked(def.type);
   const allExecOuts = def.execOut ?? [];
   // A single unnamed "then" lives in the header, opposite the flow input.
   const headOut = allExecOuts.length === 1 && !allExecOuts[0].label ? allExecOuts[0] : null;

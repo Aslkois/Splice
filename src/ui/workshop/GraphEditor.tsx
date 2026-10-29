@@ -17,7 +17,8 @@ import { compileGraph } from '../../mechanics/compile';
 import { defaultParams, getPrimitive, inputPorts, outputPorts } from '../../mechanics/registry';
 import type { NodeTrace } from '../../mechanics/runtime';
 import { uid, type GraphEdge, type MechanicGraph, type ParamValue, type PortType } from '../../mechanics/schema';
-import { checkConnection, type Issue } from '../../mechanics/validate';
+import { checkConnection, type Issue, type ValidateOptions } from '../../mechanics/validate';
+import { partLocked } from './editorContext';
 import { CableConnectionLine, CableEdge, type CableEdgeType } from './CableEdge';
 import { EditorContext, type EditorApi } from './editorContext';
 import { ModuleNode, type ModuleNodeType } from './ModuleNode';
@@ -57,7 +58,7 @@ export interface GraphEditorHandle {
 
 interface Props {
   graph: MechanicGraph;
-  maxTier: number | undefined;
+  rules: ValidateOptions;
   trace: Map<string, NodeTrace> | undefined;
   onCommit: (g: MechanicGraph) => void;
   onToast: (msg: string) => void;
@@ -65,7 +66,7 @@ interface Props {
 
 let clipboard: { nodes: MechanicGraph['nodes']; edges: GraphEdge[] } | null = null;
 
-export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEditor({ graph, maxTier, trace, onCommit, onToast }, ref) {
+export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEditor({ graph, rules, trace, onCommit, onToast }, ref) {
   const rf = useReactFlow<ModuleNodeType, CableEdgeType>();
   const [nodes, setNodes] = useState<ModuleNodeType[]>(() => toFlowNodes(graph));
   const [edges, setEdges] = useState<CableEdgeType[]>(() => toFlowEdges(graph));
@@ -92,7 +93,7 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
     [onCommit],
   );
 
-  const compiled = useMemo(() => compileGraph(graph, { maxTier }), [graph, maxTier]);
+  const compiled = useMemo(() => compileGraph(graph, rules), [graph, rules]);
   const issuesByNode = useMemo(() => {
     const m = new Map<string, Issue[]>();
     for (const i of compiled.issues) {
@@ -121,9 +122,9 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
       issuesByNode,
       trace,
       setParam,
-      maxTier,
+      isLocked: (type: string) => partLocked(type, rules),
     }),
-    [graph, connectedInputs, issuesByNode, trace, setParam, maxTier],
+    [graph, connectedInputs, issuesByNode, trace, setParam, rules],
   );
 
   const addNodeAt = useCallback(

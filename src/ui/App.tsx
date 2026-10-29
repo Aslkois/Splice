@@ -4,6 +4,7 @@ import { runner } from '../game/bridge';
 import { createGame } from '../game/createGame';
 import { useApp } from '../store/store';
 import { HUD } from './HUD';
+import { LabPicker } from './LabPicker';
 import { PauseMenu, SettingsPanel } from './Menus';
 import { SandboxTools } from './SandboxTools';
 import { Title } from './Title';
@@ -17,6 +18,7 @@ export function App() {
   const pauseOpen = useApp((s) => s.pauseOpen);
   const settingsOpen = useApp((s) => s.settingsOpen);
   const mode = useApp((s) => s.mode);
+  const labPickerOpen = useApp((s) => s.labPickerOpen);
 
   useEffect(() => {
     if (!host.current) return;
@@ -27,6 +29,7 @@ export function App() {
       if (key === 'Tab') s.toggleWorkshop();
       else if (key === 'Escape') {
         if (s.settingsOpen) s.setSettingsOpen(false);
+        else if (s.labPickerOpen) s.setLabPickerOpen(false);
         else if (s.workshopOpen) s.closeWorkshop();
         else if (s.screen === 'game') s.setPause(!s.pauseOpen);
       }
@@ -44,8 +47,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    runner.input.enabled = screen === 'game' && !workshopOpen && !pauseOpen;
-  }, [screen, workshopOpen, pauseOpen]);
+    runner.input.enabled = screen === 'game' && !workshopOpen && !pauseOpen && !labPickerOpen;
+  }, [screen, workshopOpen, pauseOpen, labPickerOpen]);
 
   return (
     <>
@@ -55,6 +58,7 @@ export function App() {
       {screen === 'title' && <Title />}
       {workshopOpen && <Workshop />}
       {pauseOpen && !workshopOpen && <PauseMenu />}
+      {labPickerOpen && !workshopOpen && <LabPicker />}
       {settingsOpen && <SettingsPanel />}
     </>
   );

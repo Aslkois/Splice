@@ -52,6 +52,15 @@ export interface AttachResult {
 /** Compiles graphs (slot order) and installs the runtime on a world. Graphs with errors are not run. */
 export function attachMechanics(world: World, graphs: MechanicGraph[], opts: ValidateOptions = {}): AttachResult {
   const all = graphs.map((g) => compileGraph(g, opts));
+  // A lab's block budget covers everything equipped, not each mechanic on its own.
+  if (opts.maxBlocks != null) {
+    const total = graphs.reduce((n, g) => n + g.nodes.length, 0);
+    if (total > opts.maxBlocks)
+      for (const c of all) {
+        c.ok = false;
+        c.issues.push({ severity: 'error', message: `Equipped mechanics use ${total} blocks together; this lab allows ${opts.maxBlocks}. Unplug some.` });
+      }
+  }
   const compiled = all.filter((c) => c.ok);
   const rejected = all.filter((c) => !c.ok);
   const host = new MechanicHost(world, compiled);
