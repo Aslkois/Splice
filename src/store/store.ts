@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { synth } from '../audio/Synth';
 import { presentation, runner, setRunnerHooks } from '../game/bridge';
+import { modeFor, rulesFor } from '../game/rules';
 import { emptyGraph, MAX_EQUIPPED, uid, type MechanicGraph, type MechanicLibrary } from '../mechanics/schema';
 import {
   loadLibrary,
@@ -15,10 +16,10 @@ import {
   type Progress,
   type Settings,
 } from '../persistence/storage';
-import type { ValidateOptions } from '../mechanics/validate';
 import { Door } from '../sim/entities/props';
-import { LAB_BY_ID } from '../sim/levels/labs';
 import type { GameMode } from '../sim/World';
+
+export { modeFor, rulesFor };
 
 export type Screen = 'title' | 'game';
 
@@ -76,26 +77,11 @@ export interface AppState {
   resetProgress(): void;
 }
 
-export function modeFor(levelId: string): GameMode {
-  if (levelId === 'hub') return 'hub';
-  if (levelId === 'sandbox') return 'sandbox';
-  if (LAB_BY_ID[levelId]) return 'lab';
-  return 'campaign';
-}
 
 export function equippedGraphs(lib: MechanicLibrary): MechanicGraph[] {
   return lib.equipped.map((id) => lib.mechanics.find((m) => m.id === id)).filter((m): m is MechanicGraph => !!m);
 }
 
-/** Which parts a world allows: everything in the sandbox, the lab's list in a lab, unlocked tiers elsewhere. */
-export function rulesFor(mode: GameMode, levelId: string, progress: Progress): ValidateOptions {
-  if (mode === 'sandbox') return {};
-  if (mode === 'lab') {
-    const lab = LAB_BY_ID[levelId];
-    return lab ? { allowedTypes: lab.parts, maxBlocks: lab.maxBlocks } : {};
-  }
-  return { maxTier: unlockedTier(progress) };
-}
 
 const initialLibrary = loadLibrary();
 if (initialLibrary.mechanics.length === 0) {

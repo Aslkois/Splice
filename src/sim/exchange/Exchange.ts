@@ -75,7 +75,7 @@ export interface Txn {
 
 /**
  * Why an operation failed, so diagnostics can tell problems apart:
- *   resources   — not enough energy or stamina, the instant limit, a full battery
+ *   resources   — not enough energy or stamina, or a full battery
  *   target      — the target is missing, gone, anchored, out of reach, or the wrong kind
  *   requirement — a timing/eligibility rule: guard not raised before impact, hit already landed…
  *   limit       — an engine safety limit (e.g. too many projectiles)
@@ -318,7 +318,7 @@ export const OPERATIONS = {
   redirect: {
     id: 'redirect',
     label: 'Redirect',
-    inputs: 'incoming hit, direction (default: back at the attacker), amplification ≥ 1',
+    inputs: 'incoming hit, direction (default: straight back along the incoming path), amplification ≥ 1',
     produces: 'the hit\'s force leaves along the new direction instead of landing on you',
     constraints: 'hit must be redirectable and still incoming; guard raised before impact; not already absorbed',
     lifecycle: 'commits immediately on the open hit; resolved with the hit',
@@ -336,16 +336,11 @@ export const OPERATIONS = {
       { label: 'Guard age', value: Math.round(Math.max(0, a.hit.guardAge) * 1000) / 1000, unit: 's' },
       { label: 'Amplify', value: Math.max(1, finite(a.amplify, 1)), unit: '×' },
     ],
-    apply: (c, a) => {
+    apply: (_c, a) => {
       const hit = a.hit;
-      let dir = a.dir;
-      if (!dir) {
-        const attacker = hit.attackerId != null ? c.world.get(hit.attackerId) : null;
-        dir =
-          attacker && attacker.alive && dist(attacker.pos, hit.point) < 1600
-            ? norm(sub(attacker.pos, hit.point))
-            : { x: -hit.direction.x, y: -hit.direction.y };
-      }
+      // No direction: retrace the incoming path exactly. A straight shot goes back the way it came,
+      // so it returns to its muzzle even when its shooter stands behind cover's edge.
+      const dir = a.dir ?? { x: -hit.direction.x, y: -hit.direction.y };
       hit.redirected = true;
       hit.redirectDir = norm(finiteVec(dir), { x: -hit.direction.x, y: -hit.direction.y });
       hit.amplify = Math.max(1, finite(a.amplify, 1));

@@ -45,7 +45,6 @@ export class Player extends Entity {
   dashTimer = 0;
   dashDir: 1 | -1 = 1;
   dashCooldown = 0;
-  airDashAvailable = true;
   /** Vertical velocity before this tick's physics step (for landing speed). */
   lastVy = 0;
   moveIntent = 0;
@@ -124,7 +123,6 @@ export class Player extends Entity {
 
     if (g) {
       this.coyote = MOVEMENT.coyoteTime;
-      this.airDashAvailable = true;
     } else if (v.y < 0) {
       // Leaving the ground upward (launched by a mechanic, or a jump) is not stepping off a ledge:
       // no grace jump in mid-air.
@@ -142,20 +140,13 @@ export class Player extends Entity {
     this.moveIntent = moveX;
     if (moveX !== 0 && this.dashTimer <= 0) this.facing = moveX > 0 ? 1 : -1;
 
-    // Dash: a body move paid in stamina (never energy).
-    if (
-      anyPressed(inp, BINDINGS.dash) &&
-      this.dashCooldown <= 0 &&
-      !stunned &&
-      (g || this.airDashAvailable) &&
-      !this.guard.active
-    ) {
+    // Dash: a ground move paid in stamina (never energy). In the air you only have what you build.
+    if (anyPressed(inp, BINDINGS.dash) && this.dashCooldown <= 0 && !stunned && g && !this.guard.active) {
       if (world.exchange.payBody(this, MOVEMENT.dashStamina, 'Dash')) {
         this.dashTimer = MOVEMENT.dashTime;
         this.dashDir = moveX !== 0 ? (moveX > 0 ? 1 : -1) : this.facing;
         this.facing = this.dashDir;
         this.dashCooldown = MOVEMENT.dashCooldown;
-        if (!g) this.airDashAvailable = false;
         world.emit({ type: 'dash', pos: this.pos, dir: this.dashDir });
       }
     }
@@ -168,6 +159,8 @@ export class Player extends Entity {
       if (this.dashTimer <= 0) {
         // A dash is a burst, not a launch: it hands back control at running speed.
         v.x = this.dashDir * Math.min(Math.abs(v.x), MOVEMENT.runSpeed * 1.15);
+        // Dashing off a ledge is not stepping off it: no grace jump afterwards.
+        if (!this.grounded) this.coyote = 0;
       }
       this.vel = v;
       return;

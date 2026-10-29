@@ -5,7 +5,7 @@ import type { Value } from './types';
  * Why something in a mechanic did not do what it says:
  *   logic       — the mechanic itself can't work (infinite numbers, values that loop, …)
  *   condition   — a condition was false or a gate was closed (If → else, Cooldown → cooling)
- *   resources   — not enough energy/stamina, the instant limit, a full battery
+ *   resources   — not enough energy/stamina, or a full battery
  *   target      — no target, a dead target, or a target out of reach
  *   requirement — a timing/eligibility rule: no open hit, guard raised too late, hit already landed
  *   interrupted — a windup or channel was broken

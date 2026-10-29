@@ -61,7 +61,7 @@ export function Title() {
           </button>
         </div>
         <p className="title-note">
-          Move with A/D, jump with Space, dash with Shift. Everything else, you build: press Tab to open the workbench, wire an event to an
+          Move with A/D, jump with Space, dash along the ground with Shift. Everything else, you build: press Tab to open the workbench, wire an event to an
           action, and test it straight away.
         </p>
       </div>

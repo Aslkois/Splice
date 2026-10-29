@@ -106,23 +106,41 @@ All balance lives in one data table (`src/sim/exchange/table.ts`) and one author
 - **Momentum (mu)** — kg·100px/s. Converted to energy through the target's mass.
 - **Health (HP)** — damage. Converted from kinetic energy at impact (1 HP per E).
 - **Stamina** — the body's precision/strain budget. Regenerates; can never become energy.
-- **Time** — an opportunity cost. Channels move at most 30 E/s; waiting yields nothing.
+- **Time** — an opportunity cost. Channels move 40 E/s; waiting yields nothing, and preparation
+  erodes once it ends, so time cannot be banked.
+
+Pricing formulas live in `src/sim/exchange/formulas.ts` and are shared by the ledger, the
+Workshop's previews, the debugger and the docs, so a displayed price is the charged price.
 
 Every operation in `OPERATIONS` declares its inputs, costs, constraints, outputs and lifecycle,
 and splits its eligibility checks into **physical** rules (always enforced) and **exchange** rules
-(the balancing law). `Exchange.perform` validates every check and the whole cost — from the
-execution's released charge first, then the battery under a 40 E-per-tick instant limit — before
-committing anything. A failed operation spends nothing and changes nothing; the HUD receipt prints
-why. Because every debit is immediate, two simultaneous operations can never spend the same energy.
+(the balancing law). `Exchange.perform` validates every check and the whole cost before committing
+anything. There is **no per-action spending cap**: the cost is paid in full at once, from the
+execution's released charge first, then the reservoir (battery). A failed operation spends nothing
+and changes nothing; the HUD receipt and the debugger say why. Because every debit is immediate
+and atomic, two simultaneous operations can never spend the same energy.
 
-Sources of energy are only: energy cells, *Absorb Incoming* (60 % of a guarded hit's kinetic
-energy, bounded by free battery capacity), and refunds of released-but-unspent charge.
+**Reservoir, commitment, progressive expenditure.** The reservoir holds at most 100 E at one
+instant. A *charge* holds energy committed to a mechanic, apart from the reservoir, and may grow
+past the reservoir's capacity while energy keeps arriving (cells, dynamos, absorbed hits) — so an
+effect costing 250 E is paid by channelling it into a charge over time and releasing it. Unspent
+released energy flows back into the reservoir; what does not fit is lost as heat. Being hurt
+while channelling scatters half the charge. `Exchange.audit` tracks start, income, spent and
+dissipated energy; tests check that reservoir + charges + released energy always balance.
+
+**Windup.** Preparation (*Wind Up*, channelling) multiplies the energy price of effects that follow
+it in the same run by `1 − 0.4·(1 − e^(−t/2))`: never below 60 %, with diminishing returns.
+Preparation creates no energy, and once it ends every second that passes erodes a second of it.
+
+Sources of energy are only: energy cells, dynamos (finite generators that feed the reservoir at
+45 E/s while you stand near them), *Absorb Incoming* (60 % of a guarded hit's kinetic energy,
+bounded by free battery capacity), and refunds of released-but-unspent charge.
 
 ### Costs
 
 | Operation          | Cost                                                                             |
 | ------------------ | -------------------------------------------------------------------------------- |
-| Impulse / Force / Set Velocity | (0.5·p + p²/2m) / 0.85 E, ×(1 + ((d−140)/220)²) beyond 140 px          |
+| Impulse / Force / Set Velocity | (0.5·\|J\|/100 + max(0, ΔKE)) / η E — ΔKE is the kinetic energy the push adds to the body (world frame); η = 1 on yourself, 0.85 on other bodies, ×(1 + ((d−140)/220)²) beyond 140 px |
 | Projectile         | (½mv² + 0.5·mv) / 0.8 E; damage on impact = kinetic energy; recoil is free       |
 | Strike             | 1 E per HP, target within 96 px                                                  |
 | Raise guard        | 6 stamina, then 3 stamina/s while up; 0.2 s recovery after lowering             |
@@ -130,7 +148,8 @@ energy, bounded by free battery capacity), and refunds of released-but-unspent c
 | Prevent damage     | 1.5 E per HP, or 3 E if the hit's force was already redirected                   |
 | Reduce damage      | 1.5 E per HP removed                                                             |
 | Absorb             | 0.15 stamina per E absorbed                                                       |
-| Channel            | 30 E/s from battery to charge; damage ≥ 4 HP interrupts and scatters half         |
+| Channel            | 40 E/s from reservoir to charge; damage ≥ 4 HP interrupts and scatters half       |
+| Windup             | energy prices after it × (1 − 0.4·(1 − e^(−t/2))); damage ≥ 4 HP interrupts       |
 
 The reflection window is never hard-coded. Players write their own timing logic (typically a
 timer compared against a threshold). The engine prices the *physical* fact — how long the guard had
