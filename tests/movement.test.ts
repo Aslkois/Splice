@@ -113,3 +113,20 @@ describe('pushing crates', () => {
     expect(moved).toBeLessThan(crate.pos.x - x0 + 400);
   });
 });
+
+describe('moving platforms', () => {
+  it('carry the player up and across', async () => {
+    const { Mover } = await import('../src/sim/entities/props');
+    const w = makeWorld();
+    w.add(new Mover(330, 500, 140, 20, { x: 330, y: 200 }, 150));
+    const p = w.player!;
+    p.pos = { x: 400, y: 470 };
+    const d = new Driver(w);
+    d.run(0.1);
+    const y0 = p.pos.y;
+    d.run(1.4);
+    expect(p.pos.y).toBeLessThan(y0 - 150);
+    expect(p.grounded).toBe(true);
+    expect(p.alive).toBe(true);
+  });
+});

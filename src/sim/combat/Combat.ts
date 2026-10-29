@@ -79,7 +79,6 @@ export class CombatSystem {
   private nextHitId = 1;
   /** Hits currently being intercepted (stack: a reflected projectile can't re-enter, but keep it general). */
   readonly open: Hit[] = [];
-  lastResolved: Hit | null = null;
 
   constructor(private world: World) {}
 
@@ -173,7 +172,6 @@ export class CombatSystem {
     hit.finalDamage = this.projectedDamage(hit);
     hit.lethal = hit.finalDamage >= victim.hp;
     hit.phase = 'resolved';
-    this.lastResolved = hit;
 
     // Stage 7: commit.
     this.commit(hit, sub, victim);
@@ -226,12 +224,6 @@ export class CombatSystem {
       world.damageEntity(victim, hit.finalDamage, hit.point, hit.direction, hit.attackerId, hit);
       if (victim instanceof Player && !hit.guarded) victim.stun = Math.max(victim.stun, MOVEMENT.hitStun);
     }
-  }
-
-  /** The hit currently being intercepted for this victim, if any. */
-  openHitFor(victimId: number): Hit | null {
-    for (let i = this.open.length - 1; i >= 0; i--) if (this.open[i].victimId === victimId) return this.open[i];
-    return null;
   }
 
   /** Small helper for hazards like spikes. */

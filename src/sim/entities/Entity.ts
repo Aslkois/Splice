@@ -16,7 +16,8 @@ export type EntityKind =
   | 'door'
   | 'bench'
   | 'sign'
-  | 'gate';
+  | 'gate'
+  | 'mover';
 
 export type Team = 'player' | 'enemy' | 'neutral';
 export type Material = 'metal' | 'wood' | 'flesh' | 'stone' | 'glass';

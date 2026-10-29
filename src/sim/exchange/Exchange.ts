@@ -368,8 +368,6 @@ function absorbAmount(c: OpContext, hit: Hit): number {
 export class Exchange {
   private nextTxn = 1;
   readonly log: Txn[] = [];
-  /** Txns since the presentation layer last drained them. */
-  readonly recent: Txn[] = [];
   /** Energy spent by successful operations since this world began. */
   totalSpent = 0;
 
@@ -594,8 +592,6 @@ export class Exchange {
     const txn: Txn = { id: this.nextTxn++, time: this.world.time, actorId: actor.id, op, label, energy: cost.energy, stamina: cost.stamina, gained, ok, reason };
     this.log.push(txn);
     if (this.log.length > 200) this.log.shift();
-    this.recent.push(txn);
-    if (this.recent.length > 64) this.recent.shift();
   }
 }
 

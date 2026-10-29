@@ -148,7 +148,7 @@ export function HUD() {
       )}
       {s.prompt && (
         <div className="prompt">
-          <span className="kbd">E</span>
+          {!s.promptLocked && <span className="kbd">E</span>}
           {s.prompt}
         </div>
       )}

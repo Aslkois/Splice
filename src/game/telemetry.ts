@@ -32,6 +32,8 @@ export interface HudSnapshot {
   objective: string | null;
   objectiveDone: boolean;
   prompt: string | null;
+  /** The prompt describes something you can't do yet (no key hint). */
+  promptLocked: boolean;
   certified: boolean;
 }
 
@@ -57,6 +59,7 @@ const EMPTY: HudSnapshot = {
   objective: null,
   objectiveDone: false,
   prompt: null,
+  promptLocked: false,
   certified: true,
 };
 

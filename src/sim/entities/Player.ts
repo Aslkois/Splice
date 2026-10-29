@@ -1,7 +1,7 @@
 import Matter from 'matter-js';
 import { DT, MOVEMENT, PHYSICS, PLAYER } from '../config';
 import { anyHeld, anyPressed, BINDINGS, EMPTY_INPUT, type InputFrame } from '../input';
-import { approach, clamp, sign, type Vec } from '../math';
+import { approach, clamp, sign } from '../math';
 import type { World } from '../World';
 import { CAT, Entity } from './Entity';
 
@@ -225,9 +225,5 @@ export class Player extends Entity {
     } else if (world.time >= a.staminaRegenAt) {
       a.stamina = clamp(a.stamina + t.stamina.regenPerSec * DT, 0, a.staminaMax);
     }
-  }
-
-  facingVec(): Vec {
-    return { x: this.facing, y: 0 };
   }
 }

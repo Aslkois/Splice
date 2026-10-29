@@ -36,7 +36,6 @@ export class GameRunner {
   /** FX produced since the presentation layer last drained them. */
   private pendingFx: FxEvent[] = [];
   private lastLoad: LoadOptions | null = null;
-  ticksThisFrame = 0;
   version = 0;
   /** Entity positions at the start of the latest tick, for render interpolation. */
   readonly prevPos = new Map<number, { x: number; y: number }>();
@@ -82,7 +81,6 @@ export class GameRunner {
 
   /** Advance by real elapsed milliseconds. Returns the number of sim ticks run. */
   advance(deltaMs: number): number {
-    this.ticksThisFrame = 0;
     if (!this.world) return 0;
     const dt = Math.min(deltaMs / 1000, 0.1);
     if (this.paused) return 0;
@@ -102,7 +100,6 @@ export class GameRunner {
       }
     }
     if (n === 5) this.acc = 0;
-    this.ticksThisFrame = n;
     return n;
   }
 

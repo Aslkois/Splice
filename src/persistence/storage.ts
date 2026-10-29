@@ -77,10 +77,18 @@ export function saveProgress(p: Progress): void {
 }
 
 export function loadSettings(): Settings {
+  // People who ask their OS for less motion start with shake and flashes off.
+  let reduced = false;
   try {
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(read(KEYS.settings) ?? '{}') as Partial<Settings>) };
+    reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    reduced = false;
+  }
+  const base = reduced ? { ...DEFAULT_SETTINGS, shake: false, flashes: false } : { ...DEFAULT_SETTINGS };
+  try {
+    return { ...base, ...(JSON.parse(read(KEYS.settings) ?? '{}') as Partial<Settings>) };
+  } catch {
+    return base;
   }
 }
 
