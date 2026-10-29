@@ -12,7 +12,7 @@ src/
     entities/          Player (controller + resources), enemies, props, projectiles
     combat/Combat.ts   staged, interceptable hit pipeline
     exchange/          the Law of Equivalent Exchange: data table + ledger/operations
-    levels/            level data (hub, three challenges, sandbox arena)
+    levels/            level data (hub, three challenges, Challenge Lab rooms, sandbox arena)
     driver.ts          the interface the world uses to raise events for mechanics
   mechanics/           player-authored mechanic graphs
     schema.ts          serialisable graph format (versioned)
@@ -168,10 +168,18 @@ There is no parry class anywhere. The Death Parry in the tests (`tests/fixtures.
 blocks: *Activate Block*, *Reset Timer*, *On Successful Block*, *Timer Value*, *Compare*, *If*,
 *Reflect Incoming*, *Prevent Incoming Damage*.
 
+## Challenge Lab
+
+A lab is a level plus rules (`src/sim/levels/labs.ts`): an allowed parts list and a block budget.
+The rules reuse the campaign's validation path (`ValidateOptions.allowedTypes` / `maxBlocks`); the
+budget is checked across every equipped mechanic in `attachMechanics`, so splitting a build over
+several mechanics doesn't dodge it. Labs always enforce the Law. A run's score is the blocks in the
+running mechanics, `Exchange.totalSpent`, and the completion time.
+
 ## Persistence
 
 - `splice.v1.library` — mechanics (schema 1) and the equipped slot order.
-- `splice.v1.progress` — completed challenges and best times.
+- `splice.v1.progress` — completed challenges, best times, and best Challenge Lab scores.
 - `splice.v1.settings` — volumes and comfort options.
 
 Graphs carry a `schema` number; `serialize.ts` migrates older schemas forward and rejects newer
@@ -196,3 +204,4 @@ ones with a reason. Unreadable mechanics are skipped rather than corrupting the 
 - `tests/combat.test.ts` — the Death Parry and every way it should fail.
 - `tests/challenges.test.ts` — a scripted bot clears all three challenges with player-built graphs,
   and fails *Cross the Gap* with the built-in moveset alone.
+- `tests/labs.test.ts` — lab rules are enforced and every lab is solvable inside them.

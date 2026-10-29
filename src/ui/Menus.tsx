@@ -2,7 +2,7 @@ import { useApp } from '../store/store';
 
 export function PauseMenu() {
   const s = useApp();
-  const inChallenge = s.mode === 'campaign';
+  const inChallenge = s.mode === 'campaign' || s.mode === 'lab';
   return (
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="pause-title">
       <div className="panel">

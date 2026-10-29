@@ -720,3 +720,75 @@ input[type='range'] {
     transform: none;
   }
 }
+
+/* ------------------------------------------------------------- challenge lab */
+
+.lab-panel {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.lab-last {
+  background: #12392d;
+  color: #a6f3d9 !important;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.lab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.lab {
+  background: var(--ink);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.lab-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.lab h3 {
+  margin: 0;
+  font-size: var(--step-1);
+}
+
+.lab-budget {
+  background: var(--tape);
+  color: var(--ink);
+  font-weight: 800;
+  padding: 1px 8px;
+  rotate: 2deg;
+}
+
+.lab-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.part.mini {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  cursor: default;
+  box-shadow: none;
+  border-width: 1.5px;
+}
+
+.lab-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--step--1);
+  color: #c9ccd8;
+}

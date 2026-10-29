@@ -66,6 +66,10 @@ After a playtest, each block shows how often it ran and the last reason it faile
   *Survive the Impossible*). Completion is detected from world state (you reached the ledge, the
   emplacements are destroyed, you walked out alive), never from which blocks you used. The Law
   is always in force.
+- **Challenge Lab** — opens after the first challenge. Short rooms with a fixed parts list and a
+  block budget covering everything you have plugged in: clear a gap with two blocks, shatter an
+  out-of-reach crystal on 60 E, fill an empty battery from a turret's fire. Scored on blocks
+  used, then energy spent, then time.
 - **Sandbox** — every part unlocked. Place crates, targets, turrets, walkers, cells and cannons
   with a click; change gravity and simulation speed; refill; reset; and switch the Law of
   Equivalent Exchange **off** to build something absurd. Sandbox play never counts towards the

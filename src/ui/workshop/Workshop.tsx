@@ -4,8 +4,8 @@ import { synth } from '../../audio/Synth';
 import { runner } from '../../game/bridge';
 import { compileGraph } from '../../mechanics/compile';
 import type { MechanicGraph } from '../../mechanics/schema';
-import { unlockedTier } from '../../persistence/storage';
-import { useApp } from '../../store/store';
+import { LAB_BY_ID } from '../../sim/levels/labs';
+import { rulesFor, useApp } from '../../store/store';
 import { GraphEditor, type GraphEditorHandle } from './GraphEditor';
 import { Library } from './Library';
 import { PartsDrawer } from './PartsDrawer';
@@ -30,8 +30,11 @@ export function Workshop() {
   const [toast, setToast] = useState<{ msg: string; key: number } | null>(null);
   const [newTier] = useState(justUnlocked);
 
-  const maxTier = mode === 'sandbox' ? undefined : unlockedTier(progress);
-  const compiled = useMemo(() => (graph ? compileGraph(graph, { maxTier }) : null), [graph, maxTier]);
+  const levelId = useApp((s) => s.levelId);
+  const rules = useMemo(() => rulesFor(mode, levelId, progress), [mode, levelId, progress]);
+  const lab = mode === 'lab' ? LAB_BY_ID[levelId] : undefined;
+  const equippedBlocks = library.equipped.reduce((n, id) => n + (library.mechanics.find((m) => m.id === id)?.nodes.length ?? 0), 0);
+  const compiled = useMemo(() => (graph ? compileGraph(graph, rules) : null), [graph, rules]);
   const errors = compiled?.issues.filter((i) => i.severity === 'error') ?? [];
   const warnings = compiled?.issues.filter((i) => i.severity === 'warning') ?? [];
   const equipped = graph ? library.equipped.includes(graph.id) : false;
@@ -86,6 +89,11 @@ export function Workshop() {
           <span className={`status ${status.tone}`} role="status">
             {status.text}
           </span>
+          {lab && (
+            <span className={`status ${equippedBlocks > lab.maxBlocks ? 'err' : 'ok'}`}>
+              Lab budget: {equippedBlocks} of {lab.maxBlocks} blocks equipped
+            </span>
+          )}
         </div>
         <div className="ws-tools">
           <button className="btn small quiet" onClick={undo} disabled={!history?.past.length} title="Undo (Ctrl+Z)">
@@ -102,13 +110,13 @@ export function Workshop() {
 
       <aside className="ws-side">
         <Library />
-        <PartsDrawer maxTier={maxTier} newTier={newTier} onAdd={(t) => editor.current?.addNode(t)} />
+        <PartsDrawer rules={rules} newTier={newTier} onAdd={(t) => editor.current?.addNode(t)} />
       </aside>
 
       <main className="ws-main">
         {graph ? (
           <ReactFlowProvider key={graph.id}>
-            <GraphEditor ref={editor} graph={graph} maxTier={maxTier} trace={trace} onCommit={onCommit} onToast={onToast} />
+            <GraphEditor ref={editor} graph={graph} rules={rules} trace={trace} onCommit={onCommit} onToast={onToast} />
           </ReactFlowProvider>
         ) : (
           <div className="mat mat-empty-lib">

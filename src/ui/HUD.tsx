@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { telemetry, type HudSnapshot } from '../game/telemetry';
+import { LAB_BY_ID } from '../sim/levels/labs';
 import { useApp } from '../store/store';
 
 function fmt(n: number): string {
@@ -134,6 +135,7 @@ export function HUD() {
   const s = useSyncExternalStore(telemetry.subscribe, telemetry.get);
   if (!s.ready) return null;
   const diag = s.diagnostics.filter((d) => d.age < 4).at(-1);
+  const lab = s.mode === 'lab' ? LAB_BY_ID[s.levelId] : undefined;
   return (
     <div className="hud">
       <Gauges s={s} />
@@ -141,7 +143,7 @@ export function HUD() {
       {s.objective && (
         <div className={`objective ${s.objectiveDone ? 'done' : ''}`}>
           {s.objectiveDone ? 'Solved. Heading back to the workshop…' : s.objective}
-          <small>{s.levelName}</small>
+          <small>{lab ? `${s.levelName}: up to ${lab.maxBlocks} blocks, ${lab.parts.length} kinds of part` : s.levelName}</small>
         </div>
       )}
       {s.prompt && (

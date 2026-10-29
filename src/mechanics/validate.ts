@@ -12,6 +12,10 @@ export interface Issue {
 export interface ValidateOptions {
   /** Highest unlocked tier (campaign). Omit for everything. */
   maxTier?: number;
+  /** Challenge Lab: only these primitive types may be used. */
+  allowedTypes?: readonly string[];
+  /** Challenge Lab: block budget for this graph. */
+  maxBlocks?: number;
 }
 
 const TYPE_NAMES: Record<PortType, string> = {
@@ -69,7 +73,10 @@ export function validateGraph(g: MechanicGraph, opts: ValidateOptions = {}): Iss
       continue;
     }
     nodes.set(node.id, { node, def });
-    if (opts.maxTier != null && def.tier > opts.maxTier)
+    if (opts.allowedTypes) {
+      if (!opts.allowedTypes.includes(def.type))
+        issues.push({ severity: 'error', message: `'${def.label}' is not allowed in this lab.`, nodeId: node.id });
+    } else if (opts.maxTier != null && def.tier > opts.maxTier)
       issues.push({ severity: 'error', message: `'${def.label}' is not unlocked yet — keep going in the campaign.`, nodeId: node.id });
     for (const p of def.params ?? []) {
       if (p.kind === 'text' && String(node.params[p.id] ?? p.default).trim() === '')
@@ -231,6 +238,9 @@ export function validateGraph(g: MechanicGraph, opts: ValidateOptions = {}): Iss
     ecolor.set(id, 2);
   };
   for (const id of nodes.keys()) if ((ecolor.get(id) ?? 0) === 0) visitExec(id);
+
+  if (opts.maxBlocks != null && g.nodes.length > opts.maxBlocks)
+    issues.push({ severity: 'error', message: `Uses ${g.nodes.length} blocks; this lab allows ${opts.maxBlocks}.` });
 
   if (!g.nodes.some((n) => getPrimitive(n.type)?.event))
     issues.push({ severity: 'warning', message: 'This mechanic has no event, so nothing will ever start it.' });

@@ -1,3 +1,4 @@
+import { LABS } from './labs';
 import type { LevelDef } from './types';
 
 /** The hub: a small workshop with the workbench, a practice dummy and the doors out. */
@@ -5,14 +6,14 @@ export const HUB: LevelDef = {
   id: 'hub',
   name: 'The Workshop',
   theme: 'workshop',
-  width: 2000,
+  width: 2100,
   height: 900,
   spawn: { x: 300, y: 700 },
   startEnergy: 100,
   solids: [
-    { x: -40, y: 760, w: 2080, h: 200, style: 'ground' },
+    { x: -40, y: 760, w: 2180, h: 200, style: 'ground' },
     { x: -40, y: -200, w: 60, h: 1000, style: 'wall' },
-    { x: 1980, y: -200, w: 60, h: 1000, style: 'wall' },
+    { x: 2080, y: -200, w: 60, h: 1000, style: 'wall' },
     { x: 560, y: 610, w: 180, h: 22, style: 'platform' },
     { x: 760, y: 500, w: 120, h: 22, style: 'platform' },
   ],
@@ -23,10 +24,11 @@ export const HUB: LevelDef = {
     { type: 'crate', x: 820, y: 736 },
     { type: 'cell', x: 820, y: 470 },
     { type: 'sign', x: 1260, y: 540, text: 'Press E at a door to go through.', w: 260 },
-    { type: 'door', x: 1080, y: 718, target: 'c1', label: 'Cross the Gap' },
-    { type: 'door', x: 1260, y: 718, target: 'c2', label: 'Return to Sender', requires: 'c1' },
-    { type: 'door', x: 1440, y: 718, target: 'c3', label: 'Survive the Impossible', requires: 'c2' },
-    { type: 'door', x: 1760, y: 718, target: 'sandbox', label: 'Sandbox' },
+    { type: 'door', x: 1060, y: 718, target: 'c1', label: 'Cross the Gap' },
+    { type: 'door', x: 1270, y: 718, target: 'c2', label: 'Return to Sender', requires: 'c1' },
+    { type: 'door', x: 1500, y: 718, target: 'c3', label: 'Survive the Impossible', requires: 'c2' },
+    { type: 'door', x: 1720, y: 718, target: 'lab', label: 'Challenge Lab', requires: 'c1' },
+    { type: 'door', x: 1900, y: 718, target: 'sandbox', label: 'Sandbox' },
   ],
 };
 
@@ -171,6 +173,13 @@ export const ARENA: LevelDef = {
   ],
 };
 
-export const LEVELS: Record<string, LevelDef> = { hub: HUB, c1: C1, c2: C2, c3: C3, sandbox: ARENA };
+export const LEVELS: Record<string, LevelDef> = {
+  hub: HUB,
+  c1: C1,
+  c2: C2,
+  c3: C3,
+  sandbox: ARENA,
+  ...Object.fromEntries(LABS.map((l) => [l.id, l.level])),
+};
 
 export const CAMPAIGN_ORDER = ['c1', 'c2', 'c3'] as const;

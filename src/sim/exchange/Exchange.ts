@@ -370,6 +370,8 @@ export class Exchange {
   readonly log: Txn[] = [];
   /** Txns since the presentation layer last drained them. */
   readonly recent: Txn[] = [];
+  /** Energy spent by successful operations since this world began. */
+  totalSpent = 0;
 
   constructor(
     private world: World,
@@ -433,6 +435,7 @@ export class Exchange {
     const fromBattery = cost.energy - fromPool;
     a.energy = Math.max(0, a.energy - fromBattery);
     a.burstUsed += fromBattery;
+    this.totalSpent += cost.energy;
     if (cost.stamina > 0) {
       a.stamina = Math.max(0, a.stamina - cost.stamina);
       a.staminaRegenAt = this.world.time + this.table.stamina.regenDelay;

@@ -7,10 +7,18 @@ const KEYS = {
   settings: 'splice.v1.settings',
 };
 
+export interface LabScore {
+  blocks: number;
+  energy: number;
+  time: number;
+}
+
 export interface Progress {
   completed: string[];
   /** Best completion time per challenge, in simulation seconds. */
   best: Record<string, number>;
+  /** Best Challenge Lab result per lab (fewest blocks, then least energy, then fastest). */
+  labs: Record<string, LabScore>;
 }
 
 export interface Settings {
@@ -57,9 +65,10 @@ export function loadProgress(): Progress {
     return {
       completed: Array.isArray(raw?.completed) ? raw!.completed.filter((x): x is string => typeof x === 'string') : [],
       best: raw?.best && typeof raw.best === 'object' ? raw.best : {},
+      labs: raw?.labs && typeof raw.labs === 'object' ? raw.labs : {},
     };
   } catch {
-    return { completed: [], best: {} };
+    return { completed: [], best: {}, labs: {} };
   }
 }
 
@@ -77,6 +86,13 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings): void {
   write(KEYS.settings, JSON.stringify(s));
+}
+
+export function betterLabScore(a: LabScore, b: LabScore | undefined): boolean {
+  if (!b) return true;
+  if (a.blocks !== b.blocks) return a.blocks < b.blocks;
+  if (Math.abs(a.energy - b.energy) > 0.05) return a.energy < b.energy;
+  return a.time < b.time;
 }
 
 /** Campaign unlock tier = number of challenges completed in order. */

@@ -1,23 +1,29 @@
 import { useMemo, useState } from 'react';
 import { CATEGORY_INFO, CATEGORY_ORDER, PRIMITIVES } from '../../mechanics/registry';
 import type { PrimitiveDef } from '../../mechanics/types';
-import { TIER_SOURCE } from './editorContext';
+import type { ValidateOptions } from '../../mechanics/validate';
+import { partLocked, TIER_SOURCE } from './editorContext';
 
 export const DRAG_MIME = 'application/splice-node';
 
 /** The parts drawer: every primitive, grouped, draggable onto the mat (or click to drop it in view). */
-export function PartsDrawer({ maxTier, newTier, onAdd }: { maxTier: number | undefined; newTier: number | null; onAdd: (type: string) => void }) {
+export function PartsDrawer({ rules, newTier, onAdd }: { rules: ValidateOptions; newTier: number | null; onAdd: (type: string) => void }) {
   const [query, setQuery] = useState('');
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     return CATEGORY_ORDER.map((cat) => ({
       cat,
-      items: PRIMITIVES.filter((p) => p.category === cat && (!q || p.label.toLowerCase().includes(q) || p.description.toLowerCase().includes(q))),
+      items: PRIMITIVES.filter(
+        (p) =>
+          p.category === cat &&
+          (!rules.allowedTypes || rules.allowedTypes.includes(p.type)) &&
+          (!q || p.label.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)),
+      ),
     })).filter((g) => g.items.length);
-  }, [query]);
+  }, [query, rules]);
 
   const tile = (p: PrimitiveDef) => {
-    const locked = maxTier != null && p.tier > maxTier;
+    const locked = partLocked(p.type, rules);
     const fresh = newTier != null && p.tier === newTier;
     return (
       <button
@@ -25,7 +31,7 @@ export function PartsDrawer({ maxTier, newTier, onAdd }: { maxTier: number | und
         className={`part cat-${p.category} ${locked ? 'locked' : ''} ${fresh ? 'fresh' : ''}`}
         draggable={!locked}
         disabled={locked}
-        title={locked ? `Unlocks after “${TIER_SOURCE[p.tier]}”` : p.description}
+        title={locked ? (rules.allowedTypes ? 'Not part of this lab' : `Unlocks after “${TIER_SOURCE[p.tier]}”`) : p.description}
         onDragStart={(e) => {
           e.dataTransfer.setData(DRAG_MIME, p.type);
           e.dataTransfer.effectAllowed = 'move';

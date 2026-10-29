@@ -1,5 +1,6 @@
 import { attachMechanics, type AttachResult } from '../mechanics/builder';
 import type { MechanicGraph } from '../mechanics/schema';
+import type { ValidateOptions } from '../mechanics/validate';
 import { DT } from '../sim/config';
 import type { FxEvent } from '../sim/fx';
 import { LEVELS } from '../sim/levels/levels';
@@ -16,7 +17,7 @@ export interface LoadOptions {
   mode: GameMode;
   lawEnabled: boolean;
   mechanics: MechanicGraph[];
-  maxTier?: number;
+  rules?: ValidateOptions;
 }
 
 /**
@@ -47,7 +48,7 @@ export class GameRunner {
     if (!level) throw new Error(`unknown level ${opts.levelId}`);
     this.lastLoad = { ...opts };
     this.world = new World({ level, mode: opts.mode, lawEnabled: opts.lawEnabled, seed: 1337 });
-    this.attach = attachMechanics(this.world, opts.mechanics, { maxTier: opts.maxTier });
+    this.attach = attachMechanics(this.world, opts.mechanics, opts.rules ?? {});
     this.acc = 0;
     this.hitstop = 0;
     this.pendingFx = [];
@@ -66,10 +67,10 @@ export class GameRunner {
   }
 
   /** Swap mechanics without resetting the world (hot reload after editing). */
-  reloadMechanics(mechanics: MechanicGraph[], maxTier?: number): void {
+  reloadMechanics(mechanics: MechanicGraph[], rules: ValidateOptions = {}): void {
     if (!this.world) return;
-    if (this.lastLoad) this.lastLoad = { ...this.lastLoad, mechanics, maxTier };
-    this.attach = attachMechanics(this.world, mechanics, { maxTier });
+    if (this.lastLoad) this.lastLoad = { ...this.lastLoad, mechanics, rules };
+    this.attach = attachMechanics(this.world, mechanics, rules);
     this.version++;
   }
 
