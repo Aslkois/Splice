@@ -11,19 +11,29 @@ src/
     World.ts           fixed 60 Hz step, entity registry, queries, post-physics passes
     entities/          Player (controller + resources), enemies, props, projectiles
     combat/Combat.ts   staged, interceptable hit pipeline
-    exchange/          the Law of Equivalent Exchange: data table + ledger/operations
-    levels/            level data (hub, three challenges, Challenge Lab rooms, sandbox arena)
+    exchange/          the Law of Equivalent Exchange: data table, shared pricing formulas, ledger
+    levels/            level data (hub, three challenges, Challenge Lab rooms, sandbox, testbench)
     driver.ts          the interface the world uses to raise events for mechanics
-  mechanics/           player-authored mechanic graphs
-    schema.ts          serialisable graph format (versioned)
+  mechanics/           player-authored mechanic graphs — ONE model, ONE runtime, two editors
+    schema.ts          serialisable graph format (v2: behaviour + per-editor layout)
     registry.ts        primitive registry (+ primitives/*: events, control, data, variables, actions)
+    presentation.ts    how each block reads in Scratch Blocks / Blueprint Blocks
+    scratch.ts         exact graph ⇄ stacked-blocks conversion and structural edits
+    scratchEdit.ts     Scratch edits expressed on the graph (plug, delete, duplicate, commit)
+    edit.ts            edits shared by both editors (add, connect, params, layout, run order)
     validate.ts        graph validation with contextual messages
     compile.ts         graph → lookup tables
     runtime.ts         bounded interpreter (MechanicHost) implementing the sim's driver
+    trace.ts           bounded execution trace for the debugger
+    costInspector.ts   the Workshop's live cost breakdown (shared formulas)
+    explain.ts         deterministic plain-language reading of a mechanic
     serialize.ts       versioned (de)serialisation, migrations, share codes
+  docs/                SPLICE Docs content: block reference, articles, examples, live figures
+  dev/                 development-only campaign validation (never imported by the game)
   game/                Phaser 4 presentation: scene, procedural art, particles, runner, input
   audio/Synth.ts       procedural WebAudio sound design
-  ui/                  React: title, HUD, menus, sandbox tools, workbench (React Flow)
+  ui/                  React: title, HUD, menus, sandbox tools, workbench (Scratch Blocks editor,
+                       Blueprint Blocks on React Flow, inspector), docs browser, debugger
   store/               zustand app state (screens, library, undo history, progress, settings)
   persistence/         localStorage with defensive parsing
 tests/                 vitest suites (headless)
@@ -38,8 +48,8 @@ renderer interpolates moving entities between their last two positions.
 
 Order inside one step:
 
-1. Clock advances; per-tick ledger counters reset.
-2. **Mechanics:** due timers fire, delayed continuations and finished channels resume.
+1. Clock advances.
+2. **Mechanics:** due timers fire, delayed continuations, finished windups and channels resume.
 3. **Mechanics:** key events for this frame (pressed, released, held, every-tick) are queued and the
    queue is flushed.
 4. Built-in controllers and AI (player movement, crate pushing, turrets, walkers, cannon).
@@ -75,11 +85,13 @@ is never executed; warnings are allowed.
 ### Resolution order (deterministic)
 
 - Equipped mechanics resolve in **slot order** (slot 1 first). The workbench lets you reorder.
-- Within one mechanic, handlers of the same event run in **canvas order**: top to bottom, then
-  left to right.
+- Within one mechanic, handlers of the same event run in **run order**: their order in the
+  mechanic's node list, shown as “runs 1st of 2” and changed explicitly (never by moving blocks).
+  Saves from before schema 2 kept their old canvas order (top to bottom, then left to right).
 - Queued events run FIFO. Signals emitted by a handler join the back of the queue.
-- Interception events (*On Incoming Hit*, then *On Successful Block*) run immediately while the hit
-  is open, in the same slot/canvas order. Signals they emit run after the hit resolves.
+- Interception events (*On Incoming Hit*, then *On Guarded Hit*) run immediately while the hit
+  is open, in the same slot/run order. Signals they emit run after the hit resolves. *On Hit
+  Resolved* is queued after the hit is committed.
 - Randomness comes from a seeded PRNG owned by the world.
 
 ### Safety limits (always on, Law or no Law)
@@ -160,7 +172,7 @@ interception does not count.
 ### Sandbox: Law OFF
 
 `World.setLaw(false)` (sandbox and tests only; campaign and hub refuse) zeroes every cost and skips
-every **exchange** check (guard-before-impact, burst limit, funds, battery space). **Physical**
+every **exchange** check (guard-before-impact, funds, battery space). **Physical**
 checks and every authored condition remain, so a parry that compares a timer still only fires
 inside its own window. Engine safety limits stay on. Challenge completion is only recorded in
 certified campaign worlds with the Law in force.
@@ -173,19 +185,21 @@ certified campaign worlds with the Law in force.
 2. **Construct** an open `Hit`: kind, attacker, direction, momentum, kinetic energy, base damage,
    blockable (kind allows it *and* it arrives inside the 200° guard arc), redirectable, and whether
    a guard was up before it.
-3. **Intercept** — the victim's *On Incoming Hit* handlers, then (if guarded) *On Successful Block*
+3. **Intercept** — the victim's *On Incoming Hit* handlers, then (if guarded) *On Guarded Hit*
    handlers run while the hit is open. Defensive actions mutate it only through the ledger.
 4. **Mitigate** — guard strain is charged to stamina unless the force was redirected (an
    exhausted guard breaks and only partly mitigates).
 5. **Remaining damage** — base damage × unabsorbed share × (1 − 0.6 if guarded) − reductions, or
    zero if prevented.
 6. **Lethality** — compared against current health.
-7. **Commit** — redirect the projectile (new owner and team) or shove the attacker, otherwise apply
-   knockback; then apply damage, and only now can death happen.
+7. **Commit** — redirect the projectile (new owner and team; with no direction given it retraces
+   its incoming path exactly) or shove the attacker, otherwise apply knockback; then apply damage,
+   and only now can death happen.
+8. **Report** — *On Damage Taken* (if damage got through) and *On Hit Resolved* are queued.
 
 There is no parry class anywhere. The Death Parry in the tests (`tests/fixtures.ts`) is just
-blocks: *Activate Block*, *Reset Timer*, *On Successful Block*, *Timer Value*, *Compare*, *If*,
-*Reflect Incoming*, *Prevent Incoming Damage*.
+blocks: *Raise Guard*, *Reset Timer*, *On Guarded Hit*, *Timer Value*, *Compare*, *If*,
+*Reflect Incoming Force*, *Prevent Incoming Damage*.
 
 ## Challenge Lab
 
@@ -197,20 +211,61 @@ running mechanics, `Exchange.totalSpent`, and the completion time.
 
 ## Persistence
 
-- `splice.v1.library` — mechanics (schema 1) and the equipped slot order.
+- `splice.v1.library` — mechanics (schema 2) and the equipped slot order.
 - `splice.v1.progress` — completed challenges, best times, and best Challenge Lab scores.
-- `splice.v1.settings` — volumes and comfort options.
+- `splice.v1.settings` — volumes, comfort options, the editor mode and the inspector width.
 
 Graphs carry a `schema` number; `serialize.ts` migrates older schemas forward and rejects newer
 ones with a reason. Unreadable mechanics are skipped rather than corrupting the library.
+
+## Editors
+
+Both editors read and write the same `MechanicGraph`; there is one runtime. A graph holds
+behaviour (`nodes`, whose order is the run order, and `edges`) and, separately, each editor's
+layout (`layout.blueprint`, `layout.scratch`). Editing positions never changes behaviour.
+
+Scratch Blocks is a *view*: `toScratch` builds stacks from the flow wires — a block's
+continuation output is the block under it, other flow outputs are C-block mouths, and choice
+blocks (if/else, cooldown, toggle) rejoin at the block under them (found with post-dominators).
+It then re-derives the flow wires from the stacks and compares them with the graph; if anything
+differs (a flow loop, a block reached from two scripts, a failure path that rejoins), the graph is
+reported as not representable, with the exact wire, and left untouched. Every Scratch edit goes
+through `insert`/`removeBlock`/`commitView`, which refuse anything that would not read back as
+the same stacks.
+
+## SPLICE Docs, inspector, debugger
+
+- `src/docs/blockDocs.ts` explains every block; names, types and defaults come from the registry.
+  `tests/docs.test.ts` fails if a block, port or flow output is undocumented, and compiles and
+  runs every block's example and every worked example.
+- Articles quote figures through `{{name}}` placeholders computed in `src/docs/numbers.ts` with the
+  shared pricing formulas, so the docs can't drift from the game.
+- The Workshop inspector prices the selected action with `costInspector.ts` (same formulas, the
+  windup in front of it, and your live state). *Explain* walks the mechanic's own structure.
+- The runtime records a bounded trace (`TraceLog`, 2000 entries, simulation tick and time): events,
+  blocks with the values they read and the flow they took, prices (base, windup, source), waits,
+  resumes and limits, each failure filed under a category. The ledger keeps an audit of start,
+  income, spent and dissipated energy.
+
+## Campaign validation
+
+`src/dev/campaignValidation.ts` lists, per challenge, the rules a player has there in normal
+progression, the resources, constraints and timing requirements, and reference solutions:
+mechanics built from primitives plus a scripted player. `tests/campaign.test.ts` plays each
+through the real world and runtime with the Law on and requires the objective to complete; it
+also requires listed "insufficient" strategies (like the built-in moveset on *Cross the Gap*) to
+fail, and checks that each level's rules are what progression actually grants.
 
 ## Adding a primitive
 
 1. Add a `PrimitiveDef` to the right file in `src/mechanics/primitives/` (category, tier, ports,
    params, and `exec` or `evaluate`, or an `event` spec).
 2. If it changes the world in a way that should cost something, add an entry to `OPERATIONS` in
-   `Exchange.ts` and call it through `ctx.perform(...)` — never mutate resources directly.
-3. Nothing else changes: the validator, compiler, runtime and workbench work from the definition.
+   `Exchange.ts` (its price in `formulas.ts`) and call it through `ctx.perform(...)` — never
+   mutate resources directly.
+3. Add its Scratch template to `presentation.ts` and its reference to `src/docs/blockDocs.ts`; the
+   tests tell you if either is missing. The validator, compiler, runtime and both editors work
+   from the definition.
 
 ## Tests
 
@@ -218,8 +273,19 @@ ones with a reason. Unreadable mechanics are skipped rather than corrupting the 
   crate pushing.
 - `tests/runtime.test.ts` — execution, branching, variables, delays, cooldowns, loops bounded,
   signal ping-pong bounded, validation, ordering, save/reload behaviour, traces.
-- `tests/exchange.test.ts` — atomic costs, instant limit, windups that let the world run, the
-  999,999 strike, Law OFF, counterfeit variables, kinetic damage, double spending, refunds.
+- `tests/exchange.test.ts` — atomic costs, no per-action limit, windups that let the world run,
+  the 999,999 strike, Law OFF, counterfeit variables, kinetic damage, double spending, refunds.
+- `tests/energy.test.ts` — progressive charging past the reservoir, conservation audit, windup
+  formula and erosion, interruption, extremes, Law OFF keeps authored conditions.
+- `tests/doubleJump.test.ts` — movement pricing, split-invariance, air jumps from primitives,
+  falling recovery, counters, walls, coyote time, frame-rate independence, editor round trips.
+- `tests/campaign.test.ts` — every challenge's reference solutions, insufficient strategies,
+  progression rules, restarts.
+- `tests/scratch.test.ts` — graph ⇄ stacks conversion, incompatibility reports, structural edits,
+  migration.
+- `tests/trace.test.ts` — failure categories, On Hit Resolved, the execution trace, hot reload.
+- `tests/docs.test.ts`, `tests/inspector.test.ts` — documentation coverage, examples, prices shown
+  equal prices charged, Explain Mechanic.
 - `tests/combat.test.ts` — the Death Parry and every way it should fail.
 - `tests/challenges.test.ts` — a scripted bot clears all three challenges with player-built graphs,
   and fails *Cross the Gap* with the built-in moveset alone.

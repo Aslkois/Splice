@@ -13,6 +13,11 @@ export interface EditorApi {
   trace: Map<string, NodeTrace> | undefined;
   setParam: (nodeId: string, key: string, value: ParamValue) => void;
   isLocked: (type: string) => boolean;
+  /** Blocks that ran in the last second of the playtest (highlighted). */
+  recent: Set<string>;
+  /** Run order among handlers of the same event, or null when alone. */
+  rank: (id: string) => { rank: number; of: number } | null;
+  moveHandler: (id: string, dir: -1 | 1) => void;
 }
 
 export const EditorContext = createContext<EditorApi | null>(null);

@@ -76,12 +76,16 @@ export function Workshop() {
   // The last playtest's execution trace, so you can see what ran and what failed.
   const trace = useMemo(() => (graph ? runner.attach?.host.traces.get(graph.id) : undefined), [graph]);
   // Blocks of this mechanic that ran in the last second of play before the Workshop opened.
-  const recent = useMemo(() => {
-    const out = new Set<string>();
+  const { recent, recentPorts } = useMemo(() => {
+    const out = { recent: new Set<string>(), recentPorts: new Set<string>() };
     const log = runner.attach?.host.traceLog;
     const now = runner.world?.time ?? 0;
     if (!graph || !log) return out;
-    for (const e of log.entries()) if (e.mechId === graph.id && e.nodeId && e.time >= now - 1) out.add(e.nodeId);
+    for (const e of log.entries()) {
+      if (e.mechId !== graph.id || !e.nodeId || e.time < now - 1) continue;
+      out.recent.add(e.nodeId);
+      if (e.port) out.recentPorts.add(`${e.nodeId}:${e.port}`);
+    }
     return out;
   }, [graph?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -223,7 +227,17 @@ export function Workshop() {
             />
           ) : (
             <ReactFlowProvider key={graph.id}>
-              <GraphEditor ref={blueprint} graph={graph} rules={rules} trace={trace} onCommit={onCommit} onToast={onToast} onSelect={setSelectedNode} />
+              <GraphEditor
+                ref={blueprint}
+                graph={graph}
+                rules={rules}
+                trace={trace}
+                onCommit={onCommit}
+                onToast={onToast}
+                onSelect={setSelectedNode}
+                recent={recent}
+                recentPorts={recentPorts}
+              />
             </ReactFlowProvider>
           )
         ) : (

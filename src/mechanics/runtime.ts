@@ -347,7 +347,7 @@ export class ExecContext {
 
 /**
  * Executes compiled mechanics for the player. Deterministic: mechanics resolve in equip-slot order,
- * handlers of the same event in canvas order, queued events FIFO. Every tick is bounded.
+ * handlers of the same event in run order (their order in the mechanic), queued events FIFO. Every tick is bounded.
  */
 export interface HostCarry {
   trace: TraceLog;

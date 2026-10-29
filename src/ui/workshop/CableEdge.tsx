@@ -2,7 +2,7 @@ import { BaseEdge, type ConnectionLineComponentProps, type Edge, type EdgeProps 
 import { getPrimitive, inputPorts, outputPorts } from '../../mechanics/registry';
 import type { PortType } from '../../mechanics/schema';
 
-export type CableEdgeType = Edge<{ portType: PortType }, 'cable'>;
+export type CableEdgeType = Edge<{ portType: PortType; active?: boolean }, 'cable'>;
 
 export const PORT_COLORS: Record<PortType, string> = {
   exec: '#f7f7f2',
@@ -31,6 +31,7 @@ export function CableEdge({ id, sourceX, sourceY, targetX, targetY, data, select
       <path d={d} fill="none" stroke="#15161c" strokeWidth={exec ? 9 : 7} strokeLinecap="round" />
       <BaseEdge id={id} path={d} style={{ stroke: color, strokeWidth: exec ? 5 : 4, strokeLinecap: 'round' }} interactionWidth={18} />
       {exec && <path d={d} fill="none" stroke="#15161c" strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="2 7" />}
+      {data?.active && <path d={d} fill="none" stroke="#ffd23f" strokeWidth={9} strokeOpacity={0.35} strokeLinecap="round" className="cable-active" />}
       {selected && <path d={d} fill="none" stroke="#ffd23f" strokeWidth={2} strokeDasharray="6 6" />}
     </g>
   );

@@ -54,3 +54,27 @@ describe('campaign validation: every challenge is solvable under normal rules', 
     expect(byTarget.c3).toBe('c2');
   });
 });
+
+describe('restarting a challenge', () => {
+  it('resets the world, your resources, the objective and mechanic state', async () => {
+    const { GameRunner } = await import('../src/game/GameRunner');
+    const { returnToSenderGraph } = await import('../src/dev/campaignValidation');
+    const r = new GameRunner();
+    r.load({ levelId: 'c2', mode: 'campaign', lawEnabled: true, mechanics: [returnToSenderGraph()], rules: { maxTier: 1 } });
+    const w0 = r.world;
+    const turret = w0.entities.find((e) => e.tag === 'sender')!;
+    turret.hp = 5;
+    w0.player!.account.energy = 1;
+    r.attach.host.characterScope.numbers.set('x', 3);
+    for (let i = 0; i < 30; i++) r.stepOnce();
+    r.restart();
+    const w = r.world;
+    expect(w).not.toBe(w0);
+    expect(w.time).toBeCloseTo(0, 9);
+    expect(w.entities.filter((e) => e.tag === 'sender').every((t) => t.hp === 30)).toBe(true);
+    expect(w.player!.account.energy).toBe(LEVELS.c2.startEnergy);
+    expect(w.objective.done).toBe(false);
+    expect(r.attach.host.characterScope.numbers.size).toBe(0);
+    expect(r.attach.compiled).toHaveLength(1);
+  });
+});
