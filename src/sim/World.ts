@@ -135,8 +135,8 @@ export class World {
     for (const s of this.level.solids) {
       const body = Matter.Bodies.rectangle(s.x + s.w / 2, s.y + s.h / 2, s.w, s.h, {
         isStatic: true,
-        friction: 0.7,
-        frictionStatic: 0.9,
+        friction: 0.6,
+        frictionStatic: 0.2,
         collisionFilter: { category: CAT.SOLID, mask: 0xffff },
         label: `solid:${s.style ?? 'ground'}`,
       });

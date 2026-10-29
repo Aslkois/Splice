@@ -18,14 +18,14 @@ export const HUB: LevelDef = {
   ],
   spawns: [
     { type: 'bench', x: 300, y: 732 },
-    { type: 'sign', x: 300, y: 560, text: 'WORKBENCH — press E (or Tab anywhere) to build', w: 300 },
+    { type: 'sign', x: 300, y: 560, text: 'The workbench. Press E here, or Tab anywhere.', w: 300 },
     { type: 'target', x: 690, y: 728, hp: 30 },
     { type: 'crate', x: 820, y: 736 },
     { type: 'cell', x: 820, y: 470 },
-    { type: 'sign', x: 1180, y: 520, text: 'Doors: press E', w: 160 },
-    { type: 'door', x: 1080, y: 718, target: 'c1', label: '1 · Cross the Gap' },
-    { type: 'door', x: 1260, y: 718, target: 'c2', label: '2 · Return to Sender', requires: 'c1' },
-    { type: 'door', x: 1440, y: 718, target: 'c3', label: '3 · Survive the Impossible', requires: 'c2' },
+    { type: 'sign', x: 1260, y: 540, text: 'Press E at a door to go through.', w: 260 },
+    { type: 'door', x: 1080, y: 718, target: 'c1', label: 'Cross the Gap' },
+    { type: 'door', x: 1260, y: 718, target: 'c2', label: 'Return to Sender', requires: 'c1' },
+    { type: 'door', x: 1440, y: 718, target: 'c3', label: 'Survive the Impossible', requires: 'c2' },
     { type: 'door', x: 1760, y: 718, target: 'sandbox', label: 'Sandbox' },
   ],
 };
@@ -46,7 +46,7 @@ export const C1: LevelDef = {
   solids: [
     { x: -40, y: 800, w: 820, h: 320, style: 'ground' },
     { x: -40, y: -300, w: 60, h: 1120, style: 'wall' },
-    { x: 1300, y: 880, w: 1040, h: 240, style: 'ground' },
+    { x: 1220, y: 880, w: 1120, h: 240, style: 'ground' },
     { x: 2280, y: -300, w: 60, h: 1200, style: 'wall' },
     { x: 330, y: 650, w: 140, h: 20, style: 'platform' },
   ],
@@ -82,10 +82,10 @@ export const C2: LevelDef = {
     { x: 560, y: 640, w: 160, h: 20, style: 'platform' },
   ],
   spawns: [
-    { type: 'turret', x: 1520, y: 560, facing: -1, interval: 1.8, range: 1100, tag: 'sender' },
-    { type: 'turret', x: 1820, y: 400, facing: -1, interval: 2.3, range: 1300, tag: 'sender' },
-    { type: 'crate', x: 760, y: 796 },
-    { type: 'sign', x: 360, y: 560, text: 'They keep sending things. Send them back.', w: 380 },
+    { type: 'turret', x: 1446, y: 560, facing: -1, interval: 1.8, range: 1100, tag: 'sender' },
+    { type: 'turret', x: 1726, y: 400, facing: -1, interval: 2.3, range: 1300, tag: 'sender' },
+    { type: 'crate', x: 640, y: 616 },
+    { type: 'sign', x: 330, y: 560, text: 'They keep sending things. Send them back.', w: 380 },
   ],
   objective: { kind: 'destroy', tags: ['sender'], text: 'Silence both emplacements.' },
 };
@@ -109,6 +109,7 @@ export const C3: LevelDef = {
     { x: 1680, y: -300, w: 60, h: 1100, style: 'wall' },
     { x: -40, y: 260, w: 1780, h: 40, style: 'metal' },
     { x: 700, y: 560, w: 160, h: 20, style: 'platform' },
+    { x: 1220, y: 450, w: 90, h: 20, style: 'metal' },
   ],
   spawns: [
     { type: 'cannon', x: 1500, y: 723, facing: -1, tag: 'judgement' },
@@ -117,7 +118,7 @@ export const C3: LevelDef = {
     { type: 'crate', x: 980, y: 736 },
     { type: 'crate', x: 600, y: 736 },
     { type: 'cell', x: 780, y: 530 },
-    { type: 'turret', x: 1100, y: 330, facing: -1, interval: 2.6, range: 900, hp: 50 },
+    { type: 'turret', x: 1265, y: 430, facing: -1, interval: 2.6, range: 900, hp: 50 },
     { type: 'sign', x: 520, y: 440, text: 'Nothing that hits this hard can be blocked. Probably.', w: 460 },
   ],
   objective: { kind: 'destroyThenReach', tags: ['judgement'], zoneTag: 'exit', text: 'Get out.' },
@@ -166,7 +167,7 @@ export const ARENA: LevelDef = {
     { type: 'cell', x: 1130, y: 700 },
     { type: 'cell', x: 2700, y: 830 },
     { type: 'cell', x: 3000, y: 670 },
-    { type: 'sign', x: 300, y: 980, text: 'SANDBOX — no score, no rules but the ones you toggle', w: 420 },
+    { type: 'sign', x: 300, y: 980, text: 'No score here, and no rules except the ones you leave switched on.', w: 420 },
   ],
 };
 

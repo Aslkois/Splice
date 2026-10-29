@@ -14,14 +14,14 @@ export class Crate extends Entity {
     this.w = this.h = heavy ? 50 : 44;
     this.body = Matter.Bodies.rectangle(x, y, this.w, this.h, {
       chamfer: { radius: 3 },
-      friction: 0.6,
-      frictionStatic: 0.8,
+      friction: 0.22,
+      frictionStatic: 0.3,
       frictionAir: 0.004,
       restitution: 0.05,
       collisionFilter: { category: CAT.PROP, mask: CAT.SOLID | CAT.PLAYER | CAT.ENEMY | CAT.PROP | CAT.GATE },
       label: 'crate',
     });
-    Matter.Body.setMass(this.body, heavy ? 12 : 3);
+    Matter.Body.setMass(this.body, heavy ? 12 : 2);
   }
 }
 

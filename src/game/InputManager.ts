@@ -11,6 +11,8 @@ export class InputManager {
   private releasedLatch = new Set<string>();
   aim: Vec | null = null;
   enabled = true;
+  /** True while a sandbox tool owns the left mouse button. */
+  mouseCaptured = false;
   /** Keys the app layer handles itself (menus, workshop). */
   onSystemKey: ((key: string, e: KeyboardEvent) => void) | null = null;
   private target: HTMLElement | null = null;
@@ -46,7 +48,7 @@ export class InputManager {
   };
 
   private onMouseDown = (e: MouseEvent) => {
-    if (!this.enabled) return;
+    if (!this.enabled || (this.mouseCaptured && e.button === 0)) return;
     const k = e.button === 0 ? 'MouseLeft' : e.button === 2 ? 'MouseRight' : null;
     if (!k) return;
     if (!this.held.has(k)) this.pressedLatch.add(k);

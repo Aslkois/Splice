@@ -142,6 +142,10 @@ export class Player extends Entity {
       v.x = this.dashDir * Math.max(MOVEMENT.dashSpeed, Math.abs(v.x));
       v.y = Math.min(v.y, 0) * 0.5;
       this.gravityScale = 0;
+      if (this.dashTimer <= 0) {
+        // A dash is a burst, not a launch: it hands back control at running speed.
+        v.x = this.dashDir * Math.min(Math.abs(v.x), MOVEMENT.runSpeed * 1.15);
+      }
       this.vel = v;
       return;
     }
