@@ -1,0 +1,819 @@
+/* The workbench: a cutting mat with patchable modules on it. */
+
+.workshop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: 58px 1fr;
+  grid-template-areas:
+    'head head'
+    'side main';
+  background: var(--mat-deep);
+}
+
+.ws-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 14px;
+  background: var(--ink);
+  border-bottom: 2px solid #000;
+}
+
+.ws-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.tape-name {
+  background: var(--tape);
+  color: var(--ink);
+  border: 0;
+  border-left: 6px solid var(--tape-edge);
+  border-right: 6px solid var(--tape-edge);
+  padding: 5px 12px;
+  font-weight: 800;
+  font-size: var(--step-1);
+  rotate: -1.2deg;
+  width: min(320px, 40vw);
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.tape-name:focus {
+  outline: 3px solid var(--yellow);
+}
+
+.status {
+  font-size: var(--step--1);
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status.ok {
+  background: #12392d;
+  color: #8ff0cf;
+}
+
+.status.warn {
+  background: #3a3218;
+  color: #ffe08a;
+}
+
+.status.err {
+  background: #4a1620;
+  color: #ffb3bd;
+}
+
+.ws-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ws-side {
+  grid-area: side;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  background: var(--ink-2);
+  border-right: 2px solid #000;
+}
+
+.ws-main {
+  grid-area: main;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------- library */
+
+.library {
+  padding: 12px;
+  border-bottom: 2px solid #000;
+  display: grid;
+  gap: 8px;
+  max-height: 42vh;
+  overflow: auto;
+}
+
+.library-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.library h3 {
+  margin: 0;
+  font-size: var(--step-0);
+  font-weight: 800;
+}
+
+.mech-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.mech {
+  display: grid;
+  grid-template-columns: 1fr 34px;
+  gap: 4px;
+}
+
+.mech-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid transparent;
+  background: #2b2e38;
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.mech.sel .mech-pick {
+  border-color: var(--paper);
+  background: #353946;
+}
+
+.mech-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.mech .plug {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+}
+
+.slot {
+  border: 2px dashed #555a6a;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+  color: #8d93a5;
+}
+
+.slot.on {
+  border: 2px solid var(--ink);
+  background: var(--orange);
+  color: var(--ink);
+}
+
+.mech-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-size: var(--step--1);
+  color: #c9ccd8;
+}
+
+.mech-actions .danger {
+  color: #ff9aa8;
+}
+
+.share {
+  display: grid;
+  gap: 6px;
+  font-size: var(--step--1);
+}
+
+.share p {
+  margin: 0;
+}
+
+.share textarea {
+  width: 100%;
+  resize: vertical;
+  background: #15161c;
+  border: 2px solid #3a3e4c;
+  border-radius: 8px;
+  padding: 6px;
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.share-error {
+  color: #ffb3bd;
+}
+
+/* ------------------------------------------------------------- parts drawer */
+
+.drawer {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.drawer-search {
+  margin: 10px 12px 6px;
+  background: #15161c;
+  border: 2px solid #3a3e4c;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.drawer-scroll {
+  overflow: auto;
+  padding: 0 12px 16px;
+}
+
+.drawer-group {
+  margin-top: 12px;
+}
+
+.cat-label {
+  margin: 0 0 6px;
+  font-size: var(--step--1);
+  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  border-left: 5px solid;
+  padding-left: 8px;
+}
+
+.cat-label small {
+  font-weight: 400;
+  color: #a9adbd;
+}
+
+.cat-label.cat-event {
+  border-color: var(--cat-event);
+}
+.cat-label.cat-action {
+  border-color: var(--cat-action);
+}
+.cat-label.cat-control {
+  border-color: var(--cat-control);
+}
+.cat-label.cat-condition {
+  border-color: var(--cat-condition);
+}
+.cat-label.cat-data {
+  border-color: var(--cat-data);
+}
+.cat-label.cat-variable {
+  border-color: var(--cat-variable);
+}
+
+.parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.part {
+  position: relative;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: grab;
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.part:active {
+  cursor: grabbing;
+}
+
+.part.cat-event {
+  background: var(--cat-event);
+}
+.part.cat-action {
+  background: var(--cat-action);
+  color: var(--paper);
+}
+.part.cat-control {
+  background: var(--cat-control);
+}
+.part.cat-condition {
+  background: var(--cat-condition);
+}
+.part.cat-data {
+  background: var(--cat-data);
+}
+.part.cat-variable {
+  background: var(--cat-variable);
+}
+
+.part.locked {
+  background: #2b2e38;
+  color: #6f7486;
+  cursor: not-allowed;
+  box-shadow: none;
+  border-style: dashed;
+  border-color: #4b5060;
+}
+
+.part-lock {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 2px;
+  background: #6f7486;
+}
+
+.part-new {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 0 5px;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.field-guide {
+  margin-top: 18px;
+  font-size: var(--step--1);
+  color: #c9ccd8;
+  background: #1c1e25;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.field-guide h4 {
+  margin: 0 0 6px;
+  color: var(--paper);
+}
+
+.field-guide p {
+  margin: 0 0 6px;
+}
+
+.sw {
+  display: inline-block;
+  width: 16px;
+  height: 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+  border: 1.5px solid var(--ink);
+}
+
+.sw.t-exec {
+  background: var(--port-exec);
+}
+.sw.t-number {
+  background: var(--port-number);
+}
+.sw.t-boolean {
+  background: var(--port-boolean);
+}
+.sw.t-vector {
+  background: var(--port-vector);
+}
+.sw.t-entity {
+  background: var(--port-entity);
+}
+
+/* ------------------------------------------------------------- mat */
+
+.mat {
+  position: absolute;
+  inset: 0;
+  background: var(--mat);
+}
+
+.mat .react-flow {
+  --xy-background-color: var(--mat);
+  --xy-edge-stroke-default: var(--paper);
+  --xy-controls-button-background-color: var(--ink-2);
+  --xy-controls-button-color: var(--paper);
+  --xy-controls-button-border-color: var(--ink);
+  --xy-controls-button-background-color-hover: var(--ink-3);
+}
+
+.mat-empty,
+.mat-empty-lib {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-1deg);
+  width: min(460px, calc(100% - 40px));
+  background: var(--tape);
+  color: var(--ink);
+  padding: 16px 20px;
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.mat-empty-lib {
+  pointer-events: auto;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.mat-empty p,
+.mat-empty-lib p {
+  margin: 0 0 6px;
+}
+
+.mat-empty p:first-child,
+.mat-empty-lib p:first-child {
+  font-weight: 800;
+  font-size: var(--step-1);
+}
+
+/* ------------------------------------------------------------- modules */
+
+.mod {
+  --plate: var(--cat-event);
+  --plate-ink: var(--ink);
+  position: relative;
+  min-width: 210px;
+  max-width: 280px;
+  background: var(--plate);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.45);
+  color: var(--paper);
+  font-size: 0.8rem;
+  padding-bottom: 8px;
+}
+
+.mod.cat-event {
+  --plate: var(--cat-event);
+}
+.mod.cat-action {
+  --plate: var(--cat-action);
+}
+.mod.cat-control {
+  --plate: var(--cat-control);
+}
+.mod.cat-condition {
+  --plate: var(--cat-condition);
+}
+.mod.cat-data {
+  --plate: var(--cat-data);
+}
+.mod.cat-variable {
+  --plate: var(--cat-variable);
+}
+
+.mod.sel {
+  outline: 3px solid var(--paper);
+  outline-offset: 3px;
+}
+
+.mod.has-error {
+  box-shadow: 0 0 0 4px var(--red), 4px 5px 0 rgba(0, 0, 0, 0.45);
+}
+
+.mod.locked {
+  filter: grayscale(0.8);
+}
+
+.screw {
+  position: absolute;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #cfd3db;
+  border: 1.5px solid var(--ink);
+}
+
+.screw::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 3px;
+  height: 1.5px;
+  background: var(--ink);
+  rotate: 35deg;
+}
+
+.screw.tl {
+  left: 6px;
+}
+
+.screw.tr {
+  right: 6px;
+}
+
+.mod-head {
+  position: relative;
+  padding: 18px 22px 8px;
+  cursor: grab;
+}
+
+.mod-head .exec-in {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mod-head .exec-in .jack {
+  pointer-events: auto;
+}
+
+.tape {
+  display: block;
+  background: var(--tape);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 0.86rem;
+  padding: 3px 9px;
+  rotate: -0.8deg;
+  box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mod-params {
+  margin: 0 8px 6px;
+  display: grid;
+  gap: 4px;
+  background: rgba(21, 22, 28, 0.85);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.param {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.param > span {
+  color: #b9bccb;
+}
+
+.mod select,
+.mod input.num,
+.mod input.text {
+  background: #2b2e38;
+  border: 1.5px solid #4b5060;
+  border-radius: 5px;
+  padding: 1px 4px;
+  font-size: 0.78rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.mod input.num {
+  width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mod .vec {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.mod .vec input.num {
+  width: 52px;
+}
+
+.mod input.check {
+  accent-color: var(--teal);
+  width: 15px;
+  height: 15px;
+}
+
+.mod-ports {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  margin: 0 8px;
+  background: rgba(21, 22, 28, 0.85);
+  border-radius: 6px;
+  padding: 4px 0;
+}
+
+.mod-ports .col {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.port-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 10px;
+}
+
+.col.out .port-row {
+  justify-content: flex-end;
+}
+
+.plabel {
+  color: #dfe2ec;
+  white-space: nowrap;
+}
+
+/* jacks */
+.react-flow .jack {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0d0e12;
+  border: 3px solid var(--jack, var(--paper));
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.react-flow .jack.react-flow__handle-left {
+  left: -18px;
+}
+
+.react-flow .jack.react-flow__handle-right {
+  right: -18px;
+}
+
+.mod-head .react-flow__handle-left {
+  left: -9px !important;
+  top: 26px;
+}
+
+.mod-head .react-flow__handle-right {
+  right: -9px !important;
+  top: 26px;
+}
+
+.react-flow .jack.t-exec {
+  --jack: var(--port-exec);
+  border-radius: 4px;
+  width: 15px;
+  height: 18px;
+}
+
+.react-flow .jack.t-number {
+  --jack: var(--port-number);
+}
+.react-flow .jack.t-boolean {
+  --jack: var(--port-boolean);
+}
+.react-flow .jack.t-vector {
+  --jack: var(--port-vector);
+}
+.react-flow .jack.t-entity {
+  --jack: var(--port-entity);
+}
+
+.react-flow .jack:hover,
+.react-flow .jack.connectingto {
+  background: var(--jack, var(--paper));
+}
+
+.react-flow .jack.connectingto.valid {
+  box-shadow: 0 0 0 4px var(--teal);
+}
+
+.mod-cost {
+  margin: 6px 10px 0;
+  font-size: 0.72rem;
+  color: var(--plate-ink);
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.mod.cat-action .mod-cost {
+  color: #dbe5ff;
+}
+
+.mod-trace {
+  margin: 6px 8px 0;
+  background: #12392d;
+  color: #a6f3d9;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  display: grid;
+}
+
+.mod-trace.bad,
+.mod-trace span + span {
+  color: #ffb3bd;
+}
+
+.mod-issue {
+  margin: 6px 8px 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.mod-issue.err {
+  background: var(--red);
+  color: var(--paper);
+}
+
+.mod-issue.warn {
+  background: #3a3218;
+  color: #ffe08a;
+}
+
+.react-flow__edge.selected .cable path {
+  filter: drop-shadow(0 0 3px rgba(255, 210, 63, 0.6));
+}
+
+/* ------------------------------------------------------------- issues + toast */
+
+.issues {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+  max-width: min(560px, calc(100% - 120px));
+  z-index: 5;
+}
+
+.issues button {
+  width: 100%;
+  text-align: left;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: var(--step--1);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.issues .error button {
+  background: #ffd9de;
+  color: #5a0d1a;
+}
+
+.issues .warning button {
+  background: #fff1c2;
+  color: #4a3a00;
+}
+
+.toast {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-left: 8px solid var(--red);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow-hard);
+  max-width: min(520px, calc(100% - 40px));
+  z-index: 6;
+  animation: drop 160ms ease-out;
+}
+
+@keyframes drop {
+  from {
+    transform: translate(-50%, -8px);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .workshop {
+    grid-template-columns: 1fr;
+    grid-template-rows: 58px 40vh 1fr;
+    grid-template-areas:
+      'head'
+      'side'
+      'main';
+  }
+  .library {
+    max-height: 18vh;
+  }
+  .tape-name {
+    width: 46vw;
+  }
+}
