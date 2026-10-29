@@ -23,6 +23,13 @@ npm run dev        # http://localhost:5173
 `npm run e2e` uses the Playwright Chromium already installed on the machine
 (`PLAYWRIGHT_BROWSERS_PATH`). Set `BASE_URL` to point it at a running dev server instead.
 
+## Deployment
+
+`.github/workflows/pages.yml` runs the tests, type-checks and builds on every pull request, and on
+every push to `main` it also publishes `dist/` to GitHub Pages (also runnable by hand from the
+Actions tab). The site is served at **https://aslkois.github.io/Splice/**. One-time setup: in the
+repository's *Settings → Pages*, set *Source* to **GitHub Actions**.
+
 ## Controls
 
 | Key                    | Action                                       |
