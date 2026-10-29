@@ -92,3 +92,24 @@ describe('player movement', () => {
     expect(p.account.stamina).toBeLessThan(s0);
   });
 });
+
+describe('pushing crates', () => {
+  it('walking into a crate shoves it along at a steady pace', async () => {
+    const { Crate } = await import('../src/sim/entities/props');
+    const w = makeWorld();
+    const d = new Driver(w);
+    d.run(0.3);
+    const crate = w.add(new Crate(480, 570))!;
+    const heavy = w.add(new Crate(900, 565, true))!;
+    d.run(0.3);
+    const x0 = crate.pos.x;
+    d.run(1.5, ['D']);
+    expect(crate.pos.x - x0).toBeGreaterThan(150);
+    // Heavier things move slower.
+    const hx0 = heavy.pos.x;
+    d.run(2, ['D']);
+    const moved = heavy.pos.x - hx0;
+    expect(moved).toBeGreaterThan(20);
+    expect(moved).toBeLessThan(crate.pos.x - x0 + 400);
+  });
+});

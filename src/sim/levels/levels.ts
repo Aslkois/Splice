@@ -116,7 +116,7 @@ export const C3: LevelDef = {
     { type: 'gate', x: 200, y: 300, w: 40, h: 460, opensWhen: 'judgement' },
     { type: 'goal', x: 40, y: 640, w: 120, h: 120, tag: 'exit' },
     { type: 'crate', x: 980, y: 736 },
-    { type: 'crate', x: 600, y: 736 },
+    { type: 'crate', x: 800, y: 536 },
     { type: 'cell', x: 780, y: 530 },
     { type: 'turret', x: 1265, y: 430, facing: -1, interval: 2.6, range: 900, hp: 50 },
     { type: 'sign', x: 520, y: 440, text: 'Nothing that hits this hard can be blocked. Probably.', w: 460 },
@@ -167,7 +167,7 @@ export const ARENA: LevelDef = {
     { type: 'cell', x: 1130, y: 700 },
     { type: 'cell', x: 2700, y: 830 },
     { type: 'cell', x: 3000, y: 670 },
-    { type: 'sign', x: 300, y: 980, text: 'No score here, and no rules except the ones you leave switched on.', w: 420 },
+    { type: 'sign', x: 250, y: 900, text: 'No score here, and no rules except the ones you leave switched on.', w: 380 },
   ],
 };
 

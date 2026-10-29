@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node e2e/run.mjs"
+    "e2e": "vite build && node e2e/run.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",

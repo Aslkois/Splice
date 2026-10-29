@@ -76,8 +76,9 @@ function walkTo(bot: Bot, x: number): void {
   bot.until(
     () => bot.p.pos.x >= x,
     () => {
-      stuckFor = Math.abs(bot.p.vel.x) < 60 && bot.p.grounded ? stuckFor + 1 : 0;
-      return stuckFor > 6 ? ['D', 'Space'] : ['D'];
+      const crateAhead = bot.world.pushablesBeside(bot.p, 1).length > 0;
+      stuckFor = (Math.abs(bot.p.vel.x) < 60 || crateAhead) && bot.p.grounded ? stuckFor + 1 : 0;
+      return stuckFor > 3 ? ['D', 'Space'] : ['D'];
     },
     8,
   );

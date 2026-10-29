@@ -36,6 +36,8 @@ export const MOVEMENT = {
   dashTime: 0.14,
   dashCooldown: 0.38,
   dashStamina: 18,
+  /** Walking into a crate pushes it at this speed (scaled down by sqrt(mass / 2)). */
+  pushSpeed: 190,
   blockMoveFactor: 0.4,
   channelMoveFactor: 0.55,
   hitStun: 0.22,

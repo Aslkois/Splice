@@ -153,7 +153,17 @@ export class Player extends Entity {
     let speedFactor = 1;
     if (this.guard.active) speedFactor = Math.min(speedFactor, MOVEMENT.blockMoveFactor);
     if (this.isChanneling) speedFactor = Math.min(speedFactor, MOVEMENT.channelMoveFactor);
-    const target = moveX * MOVEMENT.runSpeed * speedFactor;
+    let target = moveX * MOVEMENT.runSpeed * speedFactor;
+    // Shoving crates: deterministic, so a walk always moves them (no fight with static friction).
+    if (g && moveX !== 0) {
+      for (const crate of world.pushablesBeside(this, moveX)) {
+        const sp = MOVEMENT.pushSpeed / Math.sqrt(Math.max(crate.mass, 0.5) / 2);
+        const cv = crate.vel;
+        cv.x = approach(cv.x, moveX * sp, 2400 * dt);
+        crate.vel = cv;
+        if (Math.abs(target) > sp) target = moveX * sp;
+      }
+    }
     const accel = g ? MOVEMENT.groundAccel : MOVEMENT.airAccel;
     const decel = g ? MOVEMENT.groundDecel : MOVEMENT.airDecel;
     if (moveX !== 0) {

@@ -83,7 +83,10 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
   const warning = issues.find((i) => i.severity === 'warning');
   const trace = ed.trace?.get(id);
   const locked = ed.maxTier != null && def.tier > ed.maxTier;
-  const execOuts = def.execOut ?? [];
+  const allExecOuts = def.execOut ?? [];
+  // A single unnamed "then" lives in the header, opposite the flow input.
+  const headOut = allExecOuts.length === 1 && !allExecOuts[0].label ? allExecOuts[0] : null;
+  const execOuts = headOut ? [] : allExecOuts;
   const inputs = def.inputs ?? [];
   const outputs = def.outputs ?? [];
 
@@ -92,9 +95,10 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
       <span className="screw tl" />
       <span className="screw tr" />
       <div className="mod-head">
-        {def.execIn && (
+        {(def.execIn || headOut) && (
           <div className="port-row exec-in">
-            <Handle type="target" position={Position.Left} id="in" className="jack t-exec" />
+            {def.execIn && <Handle type="target" position={Position.Left} id="in" className="jack t-exec" />}
+            {headOut && <Handle type="source" position={Position.Right} id={headOut.id} className="jack t-exec" />}
           </div>
         )}
         <span className="tape" title={def.description}>

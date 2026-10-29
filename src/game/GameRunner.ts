@@ -37,6 +37,8 @@ export class GameRunner {
   private lastLoad: LoadOptions | null = null;
   ticksThisFrame = 0;
   version = 0;
+  /** Entity positions at the start of the latest tick, for render interpolation. */
+  readonly prevPos = new Map<number, { x: number; y: number }>();
 
   constructor(private hooks: RunnerHooks = {}) {}
 
@@ -49,6 +51,7 @@ export class GameRunner {
     this.acc = 0;
     this.hitstop = 0;
     this.pendingFx = [];
+    this.prevPos.clear();
     this.version++;
     this.input.releaseAll();
     this.hooks.onWorldChanged?.(this.world);
@@ -104,6 +107,8 @@ export class GameRunner {
 
   stepOnce(): void {
     const w = this.world;
+    this.prevPos.clear();
+    for (const e of w.entities) if (e.alive) this.prevPos.set(e.id, e.pos);
     w.step(this.input.nextFrame());
     for (const f of w.fx) {
       if (f.type === 'hitstop') this.hitstop = Math.max(this.hitstop, f.duration);
@@ -124,6 +129,17 @@ export class GameRunner {
 
   /** Fraction of a tick accumulated, for render interpolation. */
   get alpha(): number {
-    return this.acc / DT;
+    return this.paused || this.hitstop > 0 ? 1 : Math.min(1, this.acc / DT);
+  }
+
+  /** Offset that moves an entity from its simulated position back to its interpolated one. */
+  lerpOffset(id: number, cur: { x: number; y: number }): { x: number; y: number } {
+    const prev = this.prevPos.get(id);
+    if (!prev) return { x: 0, y: 0 };
+    const k = 1 - this.alpha;
+    const dx = (prev.x - cur.x) * k;
+    const dy = (prev.y - cur.y) * k;
+    // Teleports (respawn, reflection snaps) should not smear across the screen.
+    return Math.abs(dx) > 80 || Math.abs(dy) > 80 ? { x: 0, y: 0 } : { x: dx, y: dy };
   }
 }

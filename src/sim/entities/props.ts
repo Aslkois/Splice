@@ -39,7 +39,8 @@ export class Target extends Entity {
     this.body = Matter.Bodies.rectangle(x, y, this.w, this.h, {
       isStatic: true,
       chamfer: { radius: 8 },
-      collisionFilter: { category: CAT.PROP, mask: CAT.PLAYER | CAT.ENEMY | CAT.PROP },
+      // Targets stand on posts you can walk past; shots, strikes and thrown crates still hit them.
+      collisionFilter: { category: CAT.PROP, mask: CAT.ENEMY | CAT.PROP },
       label: 'target',
     });
   }

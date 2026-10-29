@@ -166,8 +166,9 @@ export class PlayScene extends Phaser.Scene {
 
     // camera: lead in the facing direction, settle on the ground
     if (p.alive) {
-      this.follow.x = p.pos.x + p.facing * 70 + p.vel.x * 0.12;
-      this.follow.y = p.pos.y - 90;
+      const o = runner.lerpOffset(p.id, p.pos);
+      this.follow.x = p.pos.x + o.x + p.facing * 70 + p.vel.x * 0.12;
+      this.follow.y = p.pos.y + o.y - 90;
     }
     if (this.zoomPunch > 0.0005) {
       this.zoomPunch *= Math.exp(-dt * 9);
@@ -197,17 +198,26 @@ export class PlayScene extends Phaser.Scene {
       else if (e.kind === 'bench') drawBench(g, e, near === e, now);
       else if (e instanceof Gate) drawGate(g, e, now);
     }
+    // Moving things are drawn between their last two simulated positions (smooth on any refresh rate).
+    const lerped = (e: { id: number; pos: Vec }, draw: () => void) => {
+      const o = runner.lerpOffset(e.id, e.pos);
+      if (o.x === 0 && o.y === 0) return draw();
+      g.save();
+      g.translateCanvas(o.x, o.y);
+      draw();
+      g.restore();
+    };
     for (const e of world.entities) {
       if (!e.alive) continue;
-      if (e instanceof Crate) drawCrate(g, e, now);
+      if (e instanceof Crate) lerped(e, () => drawCrate(g, e, now));
       else if (e instanceof Target) drawTarget(g, e, now);
       else if (e instanceof Cell) drawCell(g, e, now);
       else if (e instanceof Turret) drawTurret(g, e, now);
-      else if (e instanceof Walker) drawWalker(g, e, now);
+      else if (e instanceof Walker) lerped(e, () => drawWalker(g, e, now));
       else if (e instanceof Cannon) drawCannon(g, e, now, e.chargeProgress > 0 ? this.sightEnd(e) : null);
     }
-    drawPlayer(g, p, this.pview, now);
-    for (const e of world.entities) if (e.alive && e instanceof Projectile) drawProjectile(g, e);
+    lerped(p, () => drawPlayer(g, p, this.pview, now));
+    for (const e of world.entities) if (e.alive && e instanceof Projectile) lerped(e, () => drawProjectile(g, e));
 
     this.fxGfx.clear();
     this.particles.draw(this.fxGfx);

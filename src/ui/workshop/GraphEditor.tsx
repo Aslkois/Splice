@@ -268,6 +268,17 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return;
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey) {
+        const dn = rf.getNodes().filter((n) => n.selected);
+        const de = rf.getEdges().filter((ed) => ed.selected);
+        if (!dn.length && !de.length) return;
+        e.preventDefault();
+        const ids = new Set(dn.map((n) => n.id));
+        onDelete({ nodes: dn, edges: de });
+        setNodes((ns) => ns.filter((n) => !ids.has(n.id)));
+        setEdges((es) => es.filter((ed) => !ed.selected && !ids.has(ed.source) && !ids.has(ed.target)));
+        return;
+      }
       if (!(e.ctrlKey || e.metaKey)) return;
       const k = e.key.toLowerCase();
       if (k === 'c' || k === 'd') {
@@ -293,7 +304,7 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [commit, rf]);
+  }, [commit, rf, onDelete]);
 
   return (
     <EditorContext.Provider value={api}>
@@ -307,13 +318,12 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
           onEdgesChange={onEdgesChange}
           onNodeDragStop={onNodeDragStop}
           onSelectionDragStop={onNodeDragStop}
-          onDelete={onDelete}
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}
           onEdgeDoubleClick={onEdgeDoubleClick}
           isValidConnection={isValidConnection}
           connectionLineComponent={CableConnectionLine}
-          deleteKeyCode={['Delete', 'Backspace']}
+          deleteKeyCode={null}
           multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
           fitView
           fitViewOptions={{ padding: 0.25, maxZoom: 1 }}

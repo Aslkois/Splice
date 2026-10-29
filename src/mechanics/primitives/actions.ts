@@ -274,7 +274,7 @@ export const ACTIONS: PrimitiveDef[] = [
   },
   {
     type: 'act.beginCharge',
-    label: 'Begin Charge',
+    label: 'Accumulate Charge',
     category: 'action',
     tier: 2,
     description: 'Starts channelling energy from your battery into a named charge, at most 30 E/s. You move slower while channelling, and getting hurt scatters half of it.',
@@ -285,7 +285,7 @@ export const ACTIONS: PrimitiveDef[] = [
       ctx.world.exchange.beginCharge(ctx.actor, String(ctx.param(node, 'name')));
       return 'then';
     },
-    title: (p) => `Begin Charge "${p.name ?? 'Shot'}"`,
+    title: (p) => `Accumulate "${p.name ?? 'Shot'}"`,
   },
   {
     type: 'act.holdCharge',

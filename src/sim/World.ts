@@ -308,6 +308,23 @@ export class World {
     return false;
   }
 
+  /** Free-standing crates touching this entity's side in direction `dir`. */
+  pushablesBeside(e: Entity, dir: number): Entity[] {
+    if (!e.body) return [];
+    const b = e.bounds();
+    const region =
+      dir > 0
+        ? { min: { x: b.maxX - 1, y: b.minY + 8 }, max: { x: b.maxX + 4, y: b.maxY - 6 } }
+        : { min: { x: b.minX - 4, y: b.minY + 8 }, max: { x: b.minX + 1, y: b.maxY - 6 } };
+    const out: Entity[] = [];
+    for (const body of Matter.Query.region(this.allBodies(), region)) {
+      if (body === e.body || body.isStatic) continue;
+      const ent = this.entityOfBody(body);
+      if (ent && ent.kind === 'crate' && ent.alive) out.push(ent);
+    }
+    return out;
+  }
+
   solidAt(p: Vec, excludeId?: number): boolean {
     for (const body of Matter.Query.point(this.allBodies(), p)) {
       const ent = this.entityOfBody(body);
