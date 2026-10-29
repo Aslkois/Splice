@@ -117,10 +117,46 @@ export function deriveExecEdges(g: MechanicGraph, view: ScratchView): { from: st
   return out;
 }
 
+/** Can blocks attached under this stack ever run? */
 export function canContinue(g: MechanicGraph, st: SStack): boolean {
   if (!st.length) return true;
-  const spec = scratchSpecOf(g, st[st.length - 1].node);
-  return !!spec && (spec.choice || !!spec.continuation);
+  return blockContinues(g, st[st.length - 1]);
+}
+
+function blockContinues(g: MechanicGraph, b: SBlock): boolean {
+  const spec = scratchSpecOf(g, b.node);
+  if (!spec) return false;
+  // A choice block continues when at least one of its mouths can reach the bottom.
+  if (spec.choice) return spec.mouths.some((m) => canContinue(g, b.mouths[m.port] ?? []));
+  return !!spec.continuation;
+}
+
+/**
+ * Every block that has something attached under it must be able to continue into it; otherwise the
+ * blocks below could never run, and the stacks would not mean what they show. Returns the problem.
+ */
+export function wellFormed(g: MechanicGraph, view: ScratchView): string | null {
+  const check = (st: SStack): string | null => {
+    for (let i = 0; i < st.length; i++) {
+      const b = st[i];
+      if (i < st.length - 1 && !blockContinues(g, b)) {
+        const spec = scratchSpecOf(g, b.node);
+        return spec?.choice
+          ? `Every path through ${title(g, b.node)} ends its stack, so nothing could ever reach ${title(g, st[i + 1].node)} underneath it.`
+          : `Nothing can be attached under ${title(g, b.node)}: it ends its stack.`;
+      }
+      for (const m of Object.values(b.mouths)) {
+        const r = check(m);
+        if (r) return r;
+      }
+    }
+    return null;
+  };
+  for (const t of view.tops) {
+    const r = check(t.body);
+    if (r) return r;
+  }
+  return null;
 }
 
 /** Converts the canonical graph to stacks, or explains exactly why it can't be drawn that way. */
@@ -406,7 +442,7 @@ export function insert(g: MechanicGraph, view: ScratchView, fragment: Fragment, 
         return { ok: false, reason: `Nothing can be attached under ${title(g, fragment.top.body[fragment.top.body.length - 1].node)}.` };
       const merged: STop = { ...fragment.top, body: [...fragment.top.body, ...v.tops[ti].body] };
       v.tops.splice(ti, 1, merged);
-      return { ok: true, view: v };
+      return finish(g, v);
     }
     return { ok: false, reason: 'A hat block starts a script; it can only go on top of a stack, not inside one.' };
   }
@@ -421,7 +457,7 @@ export function insert(g: MechanicGraph, view: ScratchView, fragment: Fragment, 
     if (ti < 0) return { ok: false, reason: 'That stack already starts with a hat block.' };
     if (!canContinue(g, blocks)) return { ok: false, reason: `Nothing can be attached under ${title(g, blocks[blocks.length - 1].node)}.` };
     v.tops[ti] = { top: blocks[0].node, hat: false, body: [...blocks, ...v.tops[ti].body] };
-    return { ok: true, view: v };
+    return finish(g, v);
   }
   if (target.kind === 'after') {
     const hatIdx = v.tops.findIndex((t) => t.hat && t.top === target.node);
@@ -441,7 +477,7 @@ export function insert(g: MechanicGraph, view: ScratchView, fragment: Fragment, 
     if (rest.length && !canContinue(g, blocks))
       return { ok: false, reason: `${title(g, blocks[blocks.length - 1].node)} ends a stack, so it can't go above other blocks.` };
     stack.splice(index + 1, 0, ...blocks);
-    return { ok: true, view: v };
+    return finish(g, v);
   }
   // mouth
   const at = locate(v, target.node);
@@ -453,7 +489,12 @@ export function insert(g: MechanicGraph, view: ScratchView, fragment: Fragment, 
   if (existing.length && !canContinue(g, blocks))
     return { ok: false, reason: `${title(g, blocks[blocks.length - 1].node)} ends a stack, so it can't go above other blocks.` };
   owner.mouths[target.port] = [...blocks, ...existing];
-  return { ok: true, view: v };
+  return finish(g, v);
+}
+
+function finish(g: MechanicGraph, v: ScratchView): InsertResult {
+  const bad = wellFormed(g, v);
+  return bad ? { ok: false, reason: bad } : { ok: true, view: v };
 }
 
 /**
@@ -482,7 +523,25 @@ export function removeBlock(g: MechanicGraph, view: ScratchView, node: string): 
     if (!top.body.length) v.tops.splice(at.topIndex, 1);
     else top.top = top.body[0].node;
   }
+  const bad = wellFormed(g, v);
+  if (bad) return { error: bad };
   return { view: v, removed };
+}
+
+/**
+ * Moves one block up or down past its neighbour in the same stack (keyboard reordering). Blocks in
+ * its mouths travel with it.
+ */
+export function moveInStack(g: MechanicGraph, view: ScratchView, node: string, dir: -1 | 1): InsertResult {
+  const v = clone(view);
+  const at = locate(v, node);
+  if (!at) return { ok: false, reason: 'That block is no longer there.' };
+  const j = at.index + dir;
+  if (j < 0 || j >= at.stack.length) return { ok: false, reason: dir < 0 ? 'Already at the top of its stack.' : 'Already at the bottom of its stack.' };
+  [at.stack[at.index], at.stack[j]] = [at.stack[j], at.stack[at.index]];
+  const top = v.tops[at.topIndex];
+  if (!top.hat) top.top = top.body[0].node;
+  return finish(g, v);
 }
 
 /** Moves top-level items so the view lists scripts in model order (used after edits). */
