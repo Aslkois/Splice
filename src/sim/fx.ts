@@ -31,5 +31,3 @@ export type FxEvent =
   | { type: 'objective'; done: boolean }
   | { type: 'thrust'; pos: Vec; dir: Vec; amount: number }
   | { type: 'cosmetic'; pos: Vec; sound: string; pitch: number };
-
-export type FxType = FxEvent['type'];

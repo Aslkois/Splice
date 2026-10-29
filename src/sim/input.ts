@@ -48,11 +48,6 @@ export function anyPressed(frame: InputFrame, keys: readonly string[]): boolean 
   return false;
 }
 
-export function anyReleased(frame: InputFrame, keys: readonly string[]): boolean {
-  for (const k of keys) if (frame.released.has(k)) return true;
-  return false;
-}
-
 /** Normalises a DOM KeyboardEvent.code into the short names used everywhere else. */
 export function normalizeKeyCode(code: string): string | null {
   if (code.startsWith('Key')) return code.slice(3);

@@ -247,3 +247,28 @@ describe('mechanic runtime', () => {
     expect(t.lastFail).toMatch(/needs/);
   });
 });
+
+describe('hot reload', () => {
+  it('swapping mechanics refunds energy held by pending executions', () => {
+    const b = new GraphBuilder('Slow Spend');
+    const ev = b.node('on.keyPressed', { key: 'Q' });
+    const begin = b.node('act.beginCharge', { name: 'C' });
+    b.flow(ev, 'then', begin);
+    const ev2 = b.node('on.keyPressed', { key: 'R' });
+    const rel = b.node('act.releaseCharge', { name: 'C' });
+    const wait = b.node('flow.delay', { seconds: 5 });
+    b.flow(ev2, 'then', rel).flow(rel, 'then', wait);
+    const w = makeWorld();
+    attachMechanics(w, [b.build()]);
+    const d = new Driver(w);
+    d.run(0.2);
+    w.player!.account.energy = 60;
+    d.tap('Q', 1);
+    d.run(1);
+    d.tap('R', 1);
+    const held = 60 - w.player!.account.energy;
+    expect(held).toBeGreaterThan(25);
+    attachMechanics(w, []);
+    expect(w.player!.account.energy).toBeCloseTo(60, 5);
+  });
+});

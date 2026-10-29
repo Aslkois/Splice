@@ -400,6 +400,21 @@ export class MechanicHost implements MechanicDriver {
     this.keyDownAt.clear();
   }
 
+  /**
+   * Retire this host (mechanics were swapped). Pending continuations are abandoned, but any energy
+   * they were holding goes back to the battery: swapping code never destroys resources.
+   */
+  dispose(): void {
+    const ctxs = new Set<ExecContext>([...this.delayed.map((c) => c.ctx), ...this.watches.map((w) => w.ctx)]);
+    this.delayed.length = 0;
+    this.watches.length = 0;
+    this.queue.length = 0;
+    for (const ctx of ctxs) {
+      ctx.refs = 0;
+      ctx.settle();
+    }
+  }
+
   // ---- internals used by ExecContext / primitives ----
 
   spend(n: number): void {

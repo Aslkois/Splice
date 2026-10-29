@@ -63,6 +63,7 @@ export function attachMechanics(world: World, graphs: MechanicGraph[], opts: Val
   }
   const compiled = all.filter((c) => c.ok);
   const rejected = all.filter((c) => !c.ok);
+  if (world.mechanics instanceof MechanicHost) world.mechanics.dispose();
   const host = new MechanicHost(world, compiled);
   world.mechanics = host;
   return { host, compiled, rejected };
