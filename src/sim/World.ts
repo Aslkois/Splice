@@ -301,8 +301,9 @@ export class World {
       if (((body.collisionFilter.category ?? 1) & mask) === 0) continue;
       if (body.bounds.min.y < b.maxY - 10) {
         // Something overlapping our side (a wall) — only counts if its top surface really is under us.
-        const top = Math.min(...body.vertices.filter((v) => v.x > b.minX + 2 && v.x < b.maxX - 2).map((v) => v.y));
-        if (!(top >= b.maxY - 10)) continue;
+        const under = body.vertices.filter((v) => v.x > b.minX + 2 && v.x < b.maxX - 2);
+        if (!under.length) continue;
+        if (Math.min(...under.map((v) => v.y)) < b.maxY - 10) continue;
       }
       return true;
     }

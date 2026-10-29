@@ -110,7 +110,7 @@ export function paintBackdrop(layers: { far: G; mid: G; near: G }, level: LevelD
   if (level.theme === 'workshop') {
     // Pegboard.
     near.fillStyle(theme.near, 1);
-    for (let x = 0; x < W * 0.85 + 400; x += 36) for (let y = 60; y < H * 0.8; y += 36) near.fillCircle(x, y, 3);
+    for (let x = 0; x < W * 0.85 + 400; x += 36) for (let y = 60; y < H * 0.8; y += 36) near.fillRect(x - 2.5, y - 2.5, 5, 5);
   } else {
     for (let x = -200; x < W * 0.8 + 600; x += 300 + rand() * 200) {
       near.lineBetween(x, -200, x, H + 400);
