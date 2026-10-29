@@ -71,6 +71,8 @@ export interface PrimitiveDef {
   evaluate?: (ctx: ExecContext, node: CompiledNode, port: string) => Value;
   /** Only meaningful while a hit is being intercepted. */
   needsOpenHit?: boolean;
+  /** Flow outputs taken when a condition or gate said "no" (the debugger files them as conditions). */
+  closedPorts?: string[];
   /** Short exchange note shown on the node in the Workshop. */
   cost?: string;
   /** Dynamic title, e.g. "On F Pressed". */

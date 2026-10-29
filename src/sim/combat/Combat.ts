@@ -147,7 +147,7 @@ export class CombatSystem {
     hit.lethal = this.projectedDamage(hit) >= victim.hp;
 
     // Stage 3/4: defensive mechanics intercept synchronously, in documented order:
-    // every "On Incoming Hit" handler first, then (if guarded) every "On Successful Block" handler.
+    // every "On Incoming Hit" handler first, then (if guarded) every "On Guarded Hit" handler.
     if (victim instanceof Player && world.mechanics && world.player === victim) {
       this.open.push(hit);
       try {
@@ -175,6 +175,10 @@ export class CombatSystem {
 
     // Stage 7: commit.
     this.commit(hit, sub, victim);
+
+    // Stage 8: tell the victim's mechanics how it went. Queued (runs at the next flush, after any
+    // On Damage Taken it caused); the hit is closed by now, so it can no longer be changed.
+    if (victim instanceof Player && world.mechanics && world.player === victim) world.mechanics.fire('hit.resolved', { hit });
     return hit;
   }
 

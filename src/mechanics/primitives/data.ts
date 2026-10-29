@@ -27,7 +27,7 @@ const MATH_OPS = [
 ];
 
 const STATES = [
-  { value: 'blocking', label: 'is blocking' },
+  { value: 'blocking', label: 'is guarding' },
   { value: 'dashing', label: 'is dashing' },
   { value: 'channeling', label: 'is channelling' },
   { value: 'grounded', label: 'is grounded' },
@@ -195,7 +195,7 @@ export const CONDITIONS: PrimitiveDef[] = [
       }
       return false;
     },
-    title: (p) => `Check: ${STATES.find((s) => s.value === p.state)?.label ?? 'is blocking'}`,
+    title: (p) => `Check: ${STATES.find((s) => s.value === p.state)?.label ?? 'is guarding'}`,
   },
   {
     type: 'res.canAfford',

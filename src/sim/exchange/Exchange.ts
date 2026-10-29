@@ -30,11 +30,22 @@ export interface Txn {
   gained: number;
   ok: boolean;
   reason?: string;
+  failKind?: FailKind;
 }
+
+/**
+ * Why an operation failed, so diagnostics can tell problems apart:
+ *   resources   — not enough energy or stamina, the instant limit, a full battery
+ *   target      — the target is missing, gone, anchored, out of reach, or the wrong kind
+ *   requirement — a timing/eligibility rule: guard not raised before impact, hit already landed…
+ *   limit       — an engine safety limit (e.g. too many projectiles)
+ */
+export type FailKind = 'resources' | 'target' | 'requirement' | 'limit';
 
 export interface OpResult<T = unknown> {
   ok: boolean;
   reason?: string;
+  failKind?: FailKind;
   cost: Cost;
   value?: T;
 }
@@ -47,6 +58,7 @@ interface Check {
   ok: boolean;
   kind: 'physical' | 'exchange';
   reason: string;
+  cat: FailKind;
 }
 
 interface OpContext {
@@ -69,8 +81,8 @@ export interface OperationDef<A> {
   apply(c: OpContext, args: A): unknown;
 }
 
-const phys = (ok: boolean, reason: string): Check => ({ ok, kind: 'physical', reason });
-const law = (ok: boolean, reason: string): Check => ({ ok, kind: 'exchange', reason });
+const phys = (ok: boolean, reason: string, cat: FailKind = 'target'): Check => ({ ok, kind: 'physical', reason, cat });
+const law = (ok: boolean, reason: string, cat: FailKind = 'requirement'): Check => ({ ok, kind: 'exchange', reason, cat });
 
 export interface ImpulseArgs {
   target: Entity;
@@ -116,7 +128,7 @@ function impulseEnergy(c: OpContext, a: ImpulseArgs): number {
 
 function hitChecks(c: OpContext, hit: Hit): Check[] {
   return [
-    phys(hit.phase === 'intercept', 'the hit already landed'),
+    phys(hit.phase === 'intercept', 'the hit already landed', 'requirement'),
     phys(hit.victimId === c.actor.id, 'can only intercept hits aimed at yourself'),
   ];
 }
@@ -194,7 +206,7 @@ export const OPERATIONS = {
     produces: 'a kinetic projectile; its damage on impact derives from its kinetic energy. Recoil pushes the shooter.',
     constraints: 'mass and speed clamped to engine limits; projectile count capped',
     lifecycle: 'instant launch; projectile expires after its lifetime',
-    checks: (c) => [phys(c.world.projectileCount < c.world.safety.maxProjectiles, 'too many projectiles in the world')],
+    checks: (c) => [phys(c.world.projectileCount < c.world.safety.maxProjectiles, 'too many projectiles in the world', 'limit')],
     cost: (c, a) => {
       const t = c.ex.table.projectile;
       const s = a.speed / V_UNIT;
@@ -223,7 +235,7 @@ export const OPERATIONS = {
     constraints: 'not while dashing; guard must have recovered from its last lowering',
     lifecycle: 'stays up until lowered, broken, or stamina runs out; drains stamina while held',
     checks: (c, _a: NoArgs) => [
-      phys(!c.actor.isDashing, 'cannot guard mid-dash'),
+      phys(!c.actor.isDashing, 'cannot guard mid-dash', 'requirement'),
       law(c.world.time >= c.actor.guard.recoveryUntil, 'guard still recovering'),
     ],
     cost: (c, _a: NoArgs) => (c.actor.guard.active ? ZERO_COST : { energy: 0, stamina: c.ex.table.guard.activateStamina }),
@@ -326,7 +338,7 @@ export const OPERATIONS = {
       phys(!a.hit.redirected, 'the energy was already redirected'),
       phys(remainingEnergy(a.hit) > 0, 'nothing left to absorb'),
       law(a.hit.guarded, 'guard was not up before impact'),
-      law(c.actor.account.energy < c.actor.account.capacity - 0.01, 'battery is full'),
+      law(c.actor.account.energy < c.actor.account.capacity - 0.01, 'battery is full', 'resources'),
     ],
     cost: (c, a) => ({ energy: 0, stamina: absorbAmount(c, a.hit) * c.ex.table.absorb.staminaPerEnergy }),
     apply: (c, a) => {
@@ -394,16 +406,16 @@ export class Exchange {
     const op = OPERATIONS[opId] as unknown as OperationDef<unknown>;
     const lawOn = this.law;
     const c: OpContext = { ex: this, world: this.world, actor, law: lawOn };
-    if (!actor.alive) return this.fail(actor, opId, op.label, 'you are down', ZERO_COST);
+    if (!actor.alive) return this.fail(actor, opId, op.label, 'you are down', ZERO_COST, 'requirement');
     for (const chk of op.checks(c, args)) {
       if (chk.ok) continue;
       if (chk.kind === 'exchange' && !lawOn) continue;
-      return this.fail(actor, opId, op.label, chk.reason, ZERO_COST);
+      return this.fail(actor, opId, op.label, chk.reason, ZERO_COST, chk.cat);
     }
     const raw = op.cost(c, args);
     const cost: Cost = lawOn ? { energy: sanitize(raw.energy), stamina: sanitize(raw.stamina) } : ZERO_COST;
     const pay = this.canPay(actor, cost, funding);
-    if (!pay.ok) return this.fail(actor, opId, op.label, pay.reason, cost);
+    if (!pay.ok) return this.fail(actor, opId, op.label, pay.reason, cost, 'resources');
     this.commit(actor, cost, funding);
     const value = op.apply(c, args);
     this.record(actor, opId, op.label, cost, 0, true);
@@ -456,7 +468,7 @@ export class Exchange {
     if (!this.law) return true;
     const ok = this.canPay(actor, cost);
     if (!ok.ok) {
-      this.fail(actor, 'dash', label, ok.reason, cost);
+      this.fail(actor, 'dash', label, ok.reason, cost, 'resources');
       return false;
     }
     this.commit(actor, cost);
@@ -476,7 +488,7 @@ export class Exchange {
     actor.guard.recoveryUntil = this.world.time + this.table.guard.recovery + this.table.guard.breakStun;
     actor.stun = Math.max(actor.stun, this.table.guard.breakStun);
     this.world.emit({ type: 'guardBreak', pos: actor.pos });
-    this.record(actor, 'guard', 'Guard Broken', ZERO_COST, 0, false, 'out of stamina');
+    this.record(actor, 'guard', 'Guard Broken', ZERO_COST, 0, false, 'out of stamina', 'resources');
   }
 
   /** Charges the guard's stamina for soaking a hit. Returns guard effectiveness in [0,1]. */
@@ -582,14 +594,14 @@ export class Exchange {
     return s * V_UNIT;
   }
 
-  private fail(actor: Player, op: OpId, label: string, reason: string, cost: Cost): OpResult {
-    this.record(actor, op, label, cost, 0, false, reason);
+  private fail(actor: Player, op: OpId, label: string, reason: string, cost: Cost, failKind: FailKind): OpResult {
+    this.record(actor, op, label, cost, 0, false, reason, failKind);
     this.world.emit({ type: 'fizzle', pos: actor.pos, reason });
-    return { ok: false, reason, cost };
+    return { ok: false, reason, cost, failKind };
   }
 
-  private record(actor: Player, op: OpId, label: string, cost: Cost, gained: number, ok: boolean, reason?: string): void {
-    const txn: Txn = { id: this.nextTxn++, time: this.world.time, actorId: actor.id, op, label, energy: cost.energy, stamina: cost.stamina, gained, ok, reason };
+  private record(actor: Player, op: OpId, label: string, cost: Cost, gained: number, ok: boolean, reason?: string, failKind?: FailKind): void {
+    const txn: Txn = { id: this.nextTxn++, time: this.world.time, actorId: actor.id, op, label, energy: cost.energy, stamina: cost.stamina, gained, ok, reason, failKind };
     this.log.push(txn);
     if (this.log.length > 200) this.log.shift();
   }

@@ -156,6 +156,8 @@ export function validateGraph(g: MechanicGraph, opts: ValidateOptions = {}): Iss
   const reachedBy = new Map<string, Set<string>>(); // exec node -> event roots
   /** Exec nodes reachable on a path where no hit is open (non-hit event, or after a Delay). */
   const hitClosed = new Map<string, boolean>();
+  /** Exec nodes whose only hit-carrying root is On Hit Resolved (the hit is closed there). */
+  const viaResolved = new Map<string, boolean>();
   for (const [id, { def }] of nodes) {
     if (!def.event) continue;
     const seen = new Set<string>();
@@ -168,6 +170,7 @@ export function validateGraph(g: MechanicGraph, opts: ValidateOptions = {}): Iss
       if (!reachedBy.has(cur.id)) reachedBy.set(cur.id, new Set());
       reachedBy.get(cur.id)!.add(id);
       if (cur.async || !HIT_EVENTS.has(def.event.kind)) hitClosed.set(cur.id, true);
+      if (def.event.kind === 'hit.resolved') viaResolved.set(cur.id, true);
       const curType = nodes.get(cur.id)?.node.type ?? '';
       for (const nxt of execAdj.get(cur.id) ?? []) {
         const becomesAsync = cur.async || !!ASYNC_PORTS[curType]?.has(nxt.port);
@@ -178,13 +181,16 @@ export function validateGraph(g: MechanicGraph, opts: ValidateOptions = {}): Iss
       issues.push({ severity: 'warning', message: `${label(id)} isn't connected to anything yet.`, nodeId: id });
   }
 
+  const hitResolvedOnly = new Set([...viaResolved.keys()]);
   for (const [id, { def }] of nodes) {
     if (def.execIn && !reachedBy.has(id))
       issues.push({ severity: 'warning', message: `${label(id)} never runs — wire it to an event.`, nodeId: id });
     if (def.needsOpenHit && reachedBy.has(id) && hitClosed.get(id))
       issues.push({
         severity: 'warning',
-        message: `${label(id)} only works while a hit is incoming — run it from On Incoming Hit or On Successful Block, without a Delay in between.`,
+        message: hitResolvedOnly.has(id)
+          ? `${label(id)} runs from On Hit Resolved, after the hit has already landed — too late to change it. Use On Incoming Hit or On Guarded Hit.`
+          : `${label(id)} only works while a hit is incoming — run it from On Incoming Hit or On Guarded Hit, without a Delay in between.`,
         nodeId: id,
       });
   }

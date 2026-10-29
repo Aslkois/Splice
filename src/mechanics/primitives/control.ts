@@ -15,6 +15,7 @@ export const CONTROL: PrimitiveDef[] = [
       { id: 'else', label: 'False' },
     ],
     inputs: [boolPort('cond', 'Condition', false)],
+    closedPorts: ['else'],
     exec: (ctx, node) => (ctx.bool(node, 'cond') ? 'then' : 'else'),
   },
   {
@@ -63,6 +64,7 @@ export const CONTROL: PrimitiveDef[] = [
     ],
     inputs: [num('seconds', 'Seconds', 0.5, { min: 0, step: 0.05 })],
     outputs: [{ id: 'remaining', label: 'Remaining (s)', type: 'number' }],
+    closedPorts: ['blocked'],
     exec: (ctx, node) => {
       const st = ctx.nodeState(node, () => ({ last: -Infinity }));
       const cd = Math.max(0, ctx.num(node, 'seconds'));
@@ -99,10 +101,10 @@ export const CONTROL: PrimitiveDef[] = [
   },
   {
     type: 'flow.repeat',
-    label: 'Repeat',
+    label: 'Repeat Instantly',
     category: 'control',
     tier: 2,
-    description: `Runs the loop body N times (at most ${LIMITS.maxRepeat}), then continues.`,
+    description: `Runs the loop body N times (at most ${LIMITS.maxRepeat}) all within the same tick, then continues. A Delay inside the body does not pause the loop.`,
     execIn: true,
     execOut: [
       { id: 'body', label: 'Loop' },

@@ -64,8 +64,9 @@ export function attachMechanics(world: World, graphs: MechanicGraph[], opts: Val
   }
   const compiled = all.filter((c) => c.ok);
   const rejected = all.filter((c) => !c.ok);
-  if (world.mechanics instanceof MechanicHost) world.mechanics.dispose();
-  const host = new MechanicHost(world, compiled);
+  // Hot reload: the old runtime hands over the debugger trace and the player's variables/timers.
+  const carry = world.mechanics instanceof MechanicHost ? world.mechanics.dispose() : undefined;
+  const host = new MechanicHost(world, compiled, carry);
   world.mechanics = host;
   return { host, compiled, rejected };
 }

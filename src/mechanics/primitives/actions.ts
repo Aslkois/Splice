@@ -8,7 +8,7 @@ const ok = (r: { ok: boolean }) => (r.ok ? 'then' : 'failed');
 
 function needHit(ctx: ExecContext, node: CompiledNode) {
   const hit = ctx.hit;
-  if (!hit) ctx.fail(node, 'only works while a hit is incoming');
+  if (!hit) ctx.fail(node, 'only works while a hit is incoming', 'requirement');
   return hit;
 }
 
@@ -26,7 +26,7 @@ export const ACTIONS: PrimitiveDef[] = [
     exec: (ctx, node) => {
       const target = ctx.entity(node, 'target');
       if (!target) {
-        ctx.fail(node, 'no target');
+        ctx.fail(node, 'no target', 'target');
         return 'failed';
       }
       return ok(ctx.perform(node, 'impulse', { target, impulse: ctx.vec(node, 'impulse') }));
@@ -34,10 +34,11 @@ export const ACTIONS: PrimitiveDef[] = [
   },
   {
     type: 'act.force',
-    label: 'Apply Force',
+    label: 'Apply Force (One Tick)',
     category: 'action',
     tier: 0,
-    description: 'Pushes for one tick (force × 1/60 s). Use with "While Key Held" or "Every Tick" for thrust.',
+    description:
+      'Delivers force × 1/60 s of impulse, once. It does NOT keep pushing on its own: run it from "While Key Held" or "Every Tick" for sustained thrust.',
     cost: 'billed as the impulse it delivers each tick',
     execIn: true,
     execOut: THEN_FAILED,
@@ -45,7 +46,7 @@ export const ACTIONS: PrimitiveDef[] = [
     exec: (ctx, node) => {
       const target = ctx.entity(node, 'target');
       if (!target) {
-        ctx.fail(node, 'no target');
+        ctx.fail(node, 'no target', 'target');
         return 'failed';
       }
       const f = ctx.vec(node, 'force');
@@ -78,7 +79,7 @@ export const ACTIONS: PrimitiveDef[] = [
     exec: (ctx, node) => {
       const target = ctx.entity(node, 'target');
       if (!target) {
-        ctx.fail(node, 'no target');
+        ctx.fail(node, 'no target', 'target');
         return 'failed';
       }
       const want = ctx.vec(node, 'velocity');
@@ -115,10 +116,11 @@ export const ACTIONS: PrimitiveDef[] = [
   },
   {
     type: 'act.block',
-    label: 'Activate Block',
+    label: 'Raise Guard',
     category: 'action',
     tier: 1,
-    description: 'Raises your guard. Guarded frontal hits lose 60% damage. Costs stamina to raise and to hold.',
+    description:
+      'Raises your guard and keeps it up until Lower Guard (or a guard break). Only hits that arrive on a LATER tick, from the front, count as guarded: they lose 60% damage. Costs stamina to raise and to hold.',
     cost: '6 stamina, then 3/s while up',
     execIn: true,
     execOut: THEN_FAILED,
@@ -126,10 +128,10 @@ export const ACTIONS: PrimitiveDef[] = [
   },
   {
     type: 'act.unblock',
-    label: 'Deactivate Block',
+    label: 'Lower Guard',
     category: 'action',
     tier: 1,
-    description: 'Lowers your guard. It needs a moment to recover before it can rise again.',
+    description: 'Lowers your guard. It needs 0.2 s to recover before it can rise again. Does nothing if the guard is already down.',
     execIn: true,
     execOut: THEN,
     exec: (ctx) => {
@@ -155,7 +157,7 @@ export const ACTIONS: PrimitiveDef[] = [
       const speed = clamp(ctx.num(node, 'speed'), t.minSpeed, ctx.world.physicsLimits.maxProjectileSpeed);
       const mass = clamp(ctx.num(node, 'mass'), t.minMass, t.maxMass);
       if (!Number.isFinite(speed) || !Number.isFinite(mass)) {
-        ctx.fail(node, 'invalid numbers');
+        ctx.fail(node, 'invalid numbers', 'logic');
         return 'failed';
       }
       const r = ctx.perform(node, 'projectile', { dir, speed, mass });
@@ -176,7 +178,7 @@ export const ACTIONS: PrimitiveDef[] = [
     exec: (ctx, node) => {
       const target = ctx.entity(node, 'target');
       if (!target) {
-        ctx.fail(node, 'no target');
+        ctx.fail(node, 'no target', 'target');
         return 'failed';
       }
       return ok(ctx.perform(node, 'strike', { target, amount: ctx.num(node, 'amount') }));
@@ -184,11 +186,11 @@ export const ACTIONS: PrimitiveDef[] = [
   },
   {
     type: 'act.reflect',
-    label: 'Reflect Incoming',
+    label: 'Reflect Incoming Force',
     category: 'action',
     tier: 1,
     description:
-      'Sends the incoming force back where it came from. Needs a guard that was up before impact. Reusing the force is cheap; the longer your guard was up, the more precision (stamina) it costs. Amplifying costs energy.',
+      'Sends the incoming force back along the way it came. A projectile turns around and becomes yours; a melee or body hit shoves and damages its attacker. Does NOT cancel the damage to you on its own (it removes guard strain) — pair it with Prevent. Needs a guard raised before impact. Costs stamina (more the longer the guard was up); amplifying costs energy.',
     cost: 'ST = 3 + 60·age²; E = (amp² − 1)·energy / 0.75',
     needsOpenHit: true,
     execIn: true,
@@ -202,10 +204,10 @@ export const ACTIONS: PrimitiveDef[] = [
   },
   {
     type: 'act.redirect',
-    label: 'Redirect Incoming',
+    label: 'Redirect Incoming Force',
     category: 'action',
     tier: 1,
-    description: 'Like Reflect, but you choose the direction the force leaves in.',
+    description: 'Like Reflect Incoming Force, but you choose the direction the force leaves in. A zero direction means "straight back".',
     cost: 'as Reflect',
     needsOpenHit: true,
     execIn: true,
@@ -337,7 +339,7 @@ export const ACTIONS: PrimitiveDef[] = [
     exec: (ctx, node) => {
       const name = String(ctx.param(node, 'name'));
       const target = Math.max(0, ctx.num(node, 'amount'));
-      if (!Number.isFinite(target)) return ctx.fail(node, 'cannot channel an infinite amount');
+      if (!Number.isFinite(target)) return ctx.fail(node, 'cannot channel an infinite amount', 'logic');
       ctx.world.exchange.beginCharge(ctx.actor, name);
       ctx.watchCharge(node, name, target);
       return null;
