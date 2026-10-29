@@ -447,7 +447,8 @@
   --plate-ink: var(--ink);
   position: relative;
   min-width: 210px;
-  max-width: 280px;
+  max-width: 420px;
+  width: max-content;
   background: var(--plate);
   border: 3px solid var(--ink);
   border-radius: 10px;
@@ -692,6 +693,7 @@
 }
 
 .mod-cost {
+  max-width: 300px;
   margin: 6px 10px 0;
   font-size: 0.72rem;
   color: var(--plate-ink);
@@ -704,6 +706,7 @@
 }
 
 .mod-trace {
+  max-width: 300px;
   margin: 6px 8px 0;
   background: #12392d;
   color: #a6f3d9;
@@ -719,6 +722,7 @@
 }
 
 .mod-issue {
+  max-width: 300px;
   margin: 6px 8px 0;
   border-radius: 6px;
   padding: 4px 8px;

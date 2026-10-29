@@ -225,7 +225,7 @@ export class PlayScene extends Phaser.Scene {
     this.fxGfx.clear();
     this.particles.draw(this.fxGfx);
 
-    if (near && p.alive) {
+    if (near && p.alive && !(near instanceof Door && near.locked)) {
       this.prompt.setVisible(true).setPosition(near.pos.x, near.pos.y - near.h / 2 - (near instanceof Door ? 52 : 74));
     } else this.prompt.setVisible(false);
 
@@ -445,6 +445,7 @@ export class PlayScene extends Phaser.Scene {
       objective: obj?.text ?? null,
       objectiveDone: w.objective.done,
       prompt,
+      promptLocked: near instanceof Door && near.locked,
       certified: w.certified,
     };
     telemetry.publish(snap);
