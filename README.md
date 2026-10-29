@@ -23,7 +23,8 @@ npm run dev        # http://localhost:5173
 | `npm run dev`       | Dev server with hot reload                                          |
 | `npm run build`     | Type-check, then production build into `dist/`                      |
 | `npm test`          | Headless simulation, runtime, exchange, movement, campaign validation, editor conversion and docs coverage tests |
-| `npm run e2e`       | Builds, serves `dist/`, and plays the game in Chromium via Playwright |
+| `npm run e2e`       | Builds, serves `dist/`, and plays the game in Chromium via Playwright (both editors, docs, debugger, Cross the Gap) |
+| `npm run e2e:campaign` | Plays Cross the Gap (air dash) and Return to Sender (reflection) in Chromium at real speed |
 
 `npm run e2e` uses the Playwright Chromium already installed on the machine
 (`PLAYWRIGHT_BROWSERS_PATH`). Set `BASE_URL` to point it at a running dev server instead.
