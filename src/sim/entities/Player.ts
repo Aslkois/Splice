@@ -5,10 +5,15 @@ import { approach, clamp, sign } from '../math';
 import type { World } from '../World';
 import { CAT, Entity } from './Entity';
 
+/** Energy committed to a named charge, held apart from the reservoir. It may exceed the reservoir's capacity. */
 export interface ChargeState {
   amount: number;
   channeling: boolean;
   startedAt: number;
+  /** Seconds of preparation (time spent channelling). */
+  windup: number;
+  /** When channelling last stopped; preparation erodes from then on. */
+  windupEndedAt: number | null;
 }
 
 /** Resource account owned by an actor. Mutated only through the exchange ledger. */
@@ -19,8 +24,6 @@ export interface ResourceAccount {
   staminaMax: number;
   /** Time at which stamina may start regenerating again. */
   staminaRegenAt: number;
-  /** Energy drawn straight from the battery during the current tick. */
-  burstUsed: number;
   charges: Map<string, ChargeState>;
 }
 
@@ -47,6 +50,10 @@ export class Player extends Entity {
   lastVy = 0;
   moveIntent = 0;
   deadAt = -1;
+  /** Windups in progress (mechanics preparing an effect). You move slower while preparing. */
+  windingUp = 0;
+  /** Last time a hit was strong enough to break channelling and windups. */
+  staggeredAt = -Infinity;
 
   account: ResourceAccount;
   guard: GuardState = { active: false, raisedAt: -1, recoveryUntil: -1 };
@@ -81,7 +88,6 @@ export class Player extends Entity {
       stamina: t.stamina.max,
       staminaMax: t.stamina.max,
       staminaRegenAt: 0,
-      burstUsed: 0,
       charges: new Map(),
     };
   }
@@ -95,6 +101,19 @@ export class Player extends Entity {
     return false;
   }
 
+  /** Channelling a charge or winding up: preparing, so moving slower. */
+  get isPreparing(): boolean {
+    return this.windingUp > 0 || this.isChanneling;
+  }
+
+  /**
+   * On the ground as far as jumping is concerned: standing on something, or within the short grace
+   * period after stepping off a ledge during which the normal jump still works (coyote time).
+   */
+  get onGround(): boolean {
+    return this.grounded || (this.coyote > 0 && this.vel.y >= 0);
+  }
+
   /** Built-in movement. Runs after mechanics have reacted to this tick's input. */
   override update(world: World): void {
     if (!this.alive || !this.body) return;
@@ -106,6 +125,10 @@ export class Player extends Entity {
     if (g) {
       this.coyote = MOVEMENT.coyoteTime;
       this.airDashAvailable = true;
+    } else if (v.y < 0) {
+      // Leaving the ground upward (launched by a mechanic, or a jump) is not stepping off a ledge:
+      // no grace jump in mid-air.
+      this.coyote = 0;
     } else this.coyote -= dt;
 
     if (anyPressed(inp, BINDINGS.jump)) this.jumpBuffer = MOVEMENT.jumpBuffer;
@@ -152,7 +175,7 @@ export class Player extends Entity {
 
     let speedFactor = 1;
     if (this.guard.active) speedFactor = Math.min(speedFactor, MOVEMENT.blockMoveFactor);
-    if (this.isChanneling) speedFactor = Math.min(speedFactor, MOVEMENT.channelMoveFactor);
+    if (this.isPreparing) speedFactor = Math.min(speedFactor, MOVEMENT.channelMoveFactor);
     let target = moveX * MOVEMENT.runSpeed * speedFactor;
     // Shoving crates: deterministic, so a walk always moves them (no fight with static friction).
     if (g && moveX !== 0) {
@@ -206,9 +229,10 @@ export class Player extends Entity {
     if (!this.body) return;
     this.groundedPrev = this.grounded;
     this.grounded = world.isGrounded(this);
-    if (this.grounded && !this.groundedPrev && this.lastVy > 120) {
-      world.emit({ type: 'land', pos: { x: this.pos.x, y: this.pos.y + this.h / 2 }, speed: this.lastVy });
-      world.mechanics?.fire('landing', { fallSpeed: this.lastVy });
+    if (this.grounded && !this.groundedPrev) {
+      // Every touchdown counts (mechanics reset air counters on it); only hard ones make dust.
+      if (this.lastVy > 120) world.emit({ type: 'land', pos: { x: this.pos.x, y: this.pos.y + this.h / 2 }, speed: this.lastVy });
+      world.mechanics?.fire('landing', { fallSpeed: Math.max(0, this.lastVy) });
     }
   }
 

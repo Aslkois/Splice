@@ -195,7 +195,7 @@ export const ACTIONS: PrimitiveDef[] = [
     needsOpenHit: true,
     execIn: true,
     execOut: THEN_FAILED,
-    inputs: [num('amplify', 'Amplify ×', 1, { min: 1, max: 4, step: 0.25 })],
+    inputs: [num('amplify', 'Amplify ×', 1, { min: 1, step: 0.25 })],
     exec: (ctx, node) => {
       const hit = needHit(ctx, node);
       if (!hit) return 'failed';
@@ -212,7 +212,7 @@ export const ACTIONS: PrimitiveDef[] = [
     needsOpenHit: true,
     execIn: true,
     execOut: THEN_FAILED,
-    inputs: [vecPort('dir', 'Direction', 0, -1), num('amplify', 'Amplify ×', 1, { min: 1, max: 4, step: 0.25 })],
+    inputs: [vecPort('dir', 'Direction', 0, -1), num('amplify', 'Amplify ×', 1, { min: 1, step: 0.25 })],
     exec: (ctx, node) => {
       const hit = needHit(ctx, node);
       if (!hit) return 'failed';
@@ -279,7 +279,8 @@ export const ACTIONS: PrimitiveDef[] = [
     label: 'Accumulate Charge',
     category: 'action',
     tier: 2,
-    description: 'Starts channelling energy from your battery into a named charge, at most 30 E/s. You move slower while channelling, and getting hurt scatters half of it.',
+    description:
+      'Starts channelling energy from your reservoir into a named charge at 40 E/s, and keeps going until Hold Charge or Release Charge. The charge is kept apart from the reservoir and can grow past its capacity while energy keeps arriving. You move slower while channelling; a hit of 4+ damage stops it and scatters half of it.',
     params: [nameParam('Charge', 'Shot')],
     execIn: true,
     execOut: THEN,
@@ -294,7 +295,7 @@ export const ACTIONS: PrimitiveDef[] = [
     label: 'Hold Charge',
     category: 'action',
     tier: 2,
-    description: 'Stops channelling but keeps what is stored.',
+    description: 'Stops channelling but keeps what is stored. Preparation starts eroding: every second you hold erodes a second of it.',
     params: [nameParam('Charge', 'Shot')],
     execIn: true,
     execOut: THEN,
@@ -309,15 +310,18 @@ export const ACTIONS: PrimitiveDef[] = [
     label: 'Release Charge',
     category: 'action',
     tier: 2,
-    description: 'Empties a charge into this execution. Actions after it are paid from the released energy first (no instant limit). Leftovers return to the battery.',
+    description:
+      'Empties a charge into this run. Actions after it are paid from the released energy first, then from your reservoir — so one effect can cost more than the reservoir holds. Its preparation makes them cheaper. Whatever is left when the run ends flows back into the reservoir; what does not fit is lost.',
     params: [nameParam('Charge', 'Shot')],
     execIn: true,
     execOut: THEN,
     outputs: [{ id: 'energy', label: 'Energy', type: 'number' }],
     exec: (ctx, node) => {
-      const e = ctx.world.exchange.releaseCharge(ctx.actor, String(ctx.param(node, 'name')));
-      ctx.funding.energy += e;
-      ctx.setOutput(node, 'energy', e);
+      const r = ctx.world.exchange.releaseCharge(ctx.actor, String(ctx.param(node, 'name')));
+      ctx.world.exchange.fund(ctx.funding, r.energy, r.windup);
+      ctx.setOutput(node, 'energy', r.energy);
+      ctx.detail('released', r.energy);
+      ctx.detail('prepared (s)', r.windup);
       return 'then';
     },
     title: (p) => `Release Charge "${p.name ?? 'Shot'}"`,
@@ -327,7 +331,8 @@ export const ACTIONS: PrimitiveDef[] = [
     label: 'Channel Until',
     category: 'action',
     tier: 2,
-    description: 'Channels into a charge and waits — the world keeps going — until it holds the amount, then releases it into this execution. Taking damage interrupts it.',
+    description:
+      'Channels from your reservoir into a charge and waits — the world keeps going — until the charge holds the amount, then releases it into this run. The amount may be more than your reservoir holds if energy keeps arriving (cells, dynamos, absorbed hits). The channelling time counts as preparation, so what you do with it costs less. A hit of 4+ damage interrupts it: half the charge scatters, the rest stays stored.',
     params: [nameParam('Charge', 'Windup')],
     execIn: true,
     execOut: [
@@ -345,6 +350,26 @@ export const ACTIONS: PrimitiveDef[] = [
       return null;
     },
     title: (p) => `Channel "${p.name ?? 'Windup'}" Until`,
+  },
+  {
+    type: 'act.windUp',
+    label: 'Wind Up',
+    category: 'action',
+    tier: 0,
+    description:
+      'Prepares for the seconds given, then continues. The world keeps going and you move slower meanwhile; a hit of 4+ damage breaks it (Interrupted). Energy effects after it in this run cost less: the longer the preparation, the bigger the saving, up to 40%. Waiting creates no energy, and once preparation ends every second you wait erodes a second of it.',
+    cost: 'energy price × (1 − 0.4·(1 − e^(−t/2)))',
+    execIn: true,
+    execOut: [
+      { id: 'then', label: 'Ready' },
+      { id: 'interrupted', label: 'Interrupted' },
+    ],
+    inputs: [num('seconds', 'Seconds', 1, { min: 0, step: 0.1 })],
+    exec: (ctx, node) => {
+      const s = ctx.num(node, 'seconds');
+      if (!Number.isFinite(s)) return ctx.fail(node, 'cannot wind up forever', 'logic');
+      return ctx.windUp(node, s) ? null : 'interrupted';
+    },
   },
   {
     type: 'act.setFacing',

@@ -4,6 +4,7 @@ import { Walker } from '../src/sim/entities/enemies';
 import { Target } from '../src/sim/entities/props';
 import { World } from '../src/sim/World';
 import { C1 } from '../src/sim/levels/levels';
+import { windupFactor } from '../src/sim/exchange/formulas';
 import { Driver, makeWorld } from './helpers';
 
 function strikeGraph(amount: number, opts: { channel?: number } = {}) {
@@ -47,12 +48,21 @@ describe('Law of Equivalent Exchange', () => {
     expect(p.account.energy).toBe(10);
   });
 
-  it('big effects exceed the instant limit and need a channelled windup', () => {
-    const { d, p, t, w } = arena(strikeGraph(90));
+  it('there is no per-action spending limit: a 90 E strike lands at once from a 100 E reservoir', () => {
+    const { d, p, t } = arena(strikeGraph(90));
+    p.account.energy = 100;
+    d.tap('Q', 1);
+    expect(t.maxHp - t.hp).toBeCloseTo(90, 5);
+    expect(p.account.energy).toBeCloseTo(10, 5);
+  });
+
+  it('more than the reservoir holds cannot be paid from it at once — and the reason says so', () => {
+    const { d, p, t, w } = arena(strikeGraph(250));
     p.account.energy = 100;
     d.tap('Q', 1);
     expect(t.hp).toBe(t.maxHp);
-    expect(w.exchange.log.at(-1)?.reason).toMatch(/instant limit/);
+    expect(p.account.energy).toBe(100);
+    expect(w.exchange.log.at(-1)?.reason).toMatch(/needs 250⚡ \(have 100, short 150\).*charge first/);
   });
 
   it('charging takes real time while the world keeps running, then pays for the strike', () => {
@@ -69,11 +79,15 @@ describe('Law of Equivalent Exchange', () => {
       if (t.hp < t.maxHp) struckAt = w.time;
     }
     const windup = struckAt - t0;
-    // 90 E at a 30 E/s channel rate is a 3 s windup.
-    expect(windup).toBeGreaterThan(2.9);
-    expect(windup).toBeLessThan(3.3);
+    // 90 E at a 40 E/s channel rate is a 2.25 s windup.
+    expect(windup).toBeGreaterThan(2.2);
+    expect(windup).toBeLessThan(2.45);
     expect(t.maxHp - t.hp).toBeCloseTo(90, 3);
-    expect(p.account.energy).toBeCloseTo(10, 0);
+    // The preparation made the strike cheaper; what was not needed flowed back.
+    const paid = 90 * windupFactor(w.exchange.table, 2.25);
+    const strike = w.exchange.log.find((x) => x.label === 'Strike' && x.ok)!;
+    expect(strike.energy).toBeCloseTo(paid, 0);
+    expect(p.account.energy).toBeCloseTo(100 - paid, 0);
     expect(Math.abs(walker.pos.x - wx0)).toBeGreaterThan(50);
   });
 
@@ -174,9 +188,11 @@ describe('Law of Equivalent Exchange', () => {
     d.run(3, ['Q']);
     d.run(0.1);
     expect(t.maxHp - t.hp).toBeCloseTo(50, 3);
-    // ~90 E channelled in 3 s, 50 spent, ~40 refunded, plus the ~10 never channelled.
-    expect(w.player!.account.energy).toBeGreaterThan(48);
-    expect(w.player!.account.energy).toBeLessThan(52);
+    // All 100 E channelled (40 E/s), 3 s of preparation makes the strike cost less than 50,
+    // and everything not spent flows back.
+    const txn = w.exchange.log.find((x) => x.label === 'Strike' && x.ok)!;
+    expect(txn.energy).toBeCloseTo(50 * windupFactor(w.exchange.table, 3), 1);
+    expect(w.player!.account.energy).toBeCloseTo(100 - txn.energy, 1);
   });
 
   it('the campaign cannot switch the law off', () => {

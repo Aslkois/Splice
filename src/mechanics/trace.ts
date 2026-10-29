@@ -1,4 +1,4 @@
-import type { FailKind } from '../sim/exchange/Exchange';
+import type { CostQuote, FailKind } from '../sim/exchange/Exchange';
 import type { Value } from './types';
 
 /**
@@ -55,6 +55,10 @@ export interface TraceEntry {
   cost?: { energy: number; stamina: number };
   /** Battery and stamina right after this block. */
   after?: { energy: number; stamina: number };
+  /** How the exchange priced this block (base price, windup, where the energy came from…). */
+  quote?: CostQuote;
+  /** Extra figures the block reported (e.g. a variable's new value). */
+  details?: { label: string; value: string }[];
 }
 
 export function formatValue(v: Value): string {

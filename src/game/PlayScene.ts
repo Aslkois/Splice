@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { synth } from '../audio/Synth';
 import { Cannon, Turret, Walker } from '../sim/entities/enemies';
 import { Projectile } from '../sim/entities/Projectile';
-import { Cell, Crate, Door, Gate, Goal, Mover, Sign, Spikes, Target } from '../sim/entities/props';
+import { Cell, Crate, Door, Dynamo, Gate, Goal, Mover, Sign, Spikes, Target } from '../sim/entities/props';
 import type { FxEvent } from '../sim/fx';
 import type { Vec } from '../sim/math';
 import { presentation, runner } from './bridge';
@@ -10,6 +10,7 @@ import {
   drawBench,
   drawCannon,
   drawCell,
+  drawDynamo,
   drawCrate,
   drawDoor,
   drawGate,
@@ -215,6 +216,7 @@ export class PlayScene extends Phaser.Scene {
       else if (e instanceof Mover) lerped(e, () => drawMover(g, e, now));
       else if (e instanceof Target) drawTarget(g, e, now);
       else if (e instanceof Cell) drawCell(g, e, now);
+      else if (e instanceof Dynamo) drawDynamo(g, e, p.alive ? p.pos : null, world.time, now);
       else if (e instanceof Turret) drawTurret(g, e, now);
       else if (e instanceof Walker) lerped(e, () => drawWalker(g, e, now));
       else if (e instanceof Cannon) drawCannon(g, e, now, e.chargeProgress > 0 ? this.sightEnd(e) : null);

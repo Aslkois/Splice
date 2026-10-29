@@ -62,6 +62,28 @@ export class Cell extends Entity {
   }
 }
 
+/**
+ * A generator with a finite reserve. While you stand in its field it feeds your reservoir at a
+ * limited rate — a real source of energy (it does not refill), so charges can grow past your
+ * reservoir's capacity while you keep channelling next to it.
+ */
+export class Dynamo extends Entity {
+  readonly kind = 'dynamo' as const;
+  reserve: number;
+  readonly capacity: number;
+  readonly radius: number;
+  /** Sim time of the last transfer, for the presentation layer. */
+  feedingAt = -1;
+  constructor(x: number, y: number, reserve: number, radius = 120) {
+    super();
+    this._pos = { x, y };
+    this.reserve = this.capacity = reserve;
+    this.radius = radius;
+    this.w = 46;
+    this.h = 70;
+  }
+}
+
 export class Spikes extends Entity {
   readonly kind = 'spikes' as const;
   damage = 25;

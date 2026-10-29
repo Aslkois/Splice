@@ -146,9 +146,10 @@ export const CONDITIONS: PrimitiveDef[] = [
     label: 'Is Grounded',
     category: 'condition',
     tier: 0,
-    description: 'True while your feet are on something.',
+    description:
+      'True while your feet are on something — and for 0.1 s after you step off a ledge, while the normal jump still works (the same grace the built-in jump uses). So "not grounded" means "the normal jump is no longer available": exactly when an air jump should take over. Touching a wall does not count.',
     outputs: BOOL_OUT,
-    evaluate: (ctx) => ctx.actor.grounded,
+    evaluate: (ctx) => ctx.actor.onGround,
   },
   {
     type: 'state.keyHeld',
@@ -183,7 +184,7 @@ export const CONDITIONS: PrimitiveDef[] = [
         case 'channeling':
           return !!p?.isChanneling;
         case 'grounded':
-          return p ? p.grounded : ctx.world.isGrounded(e);
+          return p ? p.onGround : ctx.world.isGrounded(e);
         case 'moving':
           return len(e.vel) > 20;
         case 'facingRight':

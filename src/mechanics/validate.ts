@@ -52,6 +52,7 @@ const HIT_EVENTS = new Set(['hit.incoming', 'block.success']);
 const ASYNC_PORTS: Record<string, Set<string>> = {
   'flow.delay': new Set(['then']),
   'act.channelUntil': new Set(['charged', 'interrupted']),
+  'act.windUp': new Set(['then', 'interrupted']),
 };
 
 export function validateGraph(g: MechanicGraph, opts: ValidateOptions = {}): Issue[] {

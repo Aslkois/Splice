@@ -2,7 +2,7 @@ import type { Hit } from '../sim/combat/Combat';
 import type { MechanicDriver, SimEventKind } from '../sim/driver';
 import type { Entity } from '../sim/entities/Entity';
 import type { Player } from '../sim/entities/Player';
-import type { FundingPool, OpResult, OPERATIONS } from '../sim/exchange/Exchange';
+import { emptyPool, type FundingPool, type OpResult, type OPERATIONS } from '../sim/exchange/Exchange';
 import type { InputFrame } from '../sim/input';
 import type { World } from '../sim/World';
 import type { CompiledMechanic } from './compile';
@@ -68,14 +68,10 @@ interface Continuation {
   port: string;
 }
 
-interface ChargeWatch {
-  seq: number;
-  ctx: ExecContext;
-  node: CompiledNode;
-  name: string;
-  target: number;
-  started: number;
-}
+/** A paused execution waiting on the world: a charge filling up, or a windup running its course. */
+type Watch =
+  | { kind: 'charge'; seq: number; ctx: ExecContext; node: CompiledNode; name: string; target: number; started: number }
+  | { kind: 'windup'; seq: number; ctx: ExecContext; node: CompiledNode; started: number; until: number };
 
 interface QueuedEvent {
   kind: SimEventKind;
@@ -102,7 +98,7 @@ const titleOf = (node: CompiledNode) => node.def.title?.(node.params) ?? node.de
 /** One execution of one event handler (and any continuations it schedules). */
 export class ExecContext {
   readonly outputs = new Map<string, Value>();
-  readonly funding: FundingPool = { energy: 0 };
+  readonly funding: FundingPool = emptyPool();
   refs = 0;
   finished = false;
   private branchDepth = 0;
@@ -227,6 +223,7 @@ export class ExecContext {
     const cur = this.current;
     if (cur) {
       cur.cost = { energy: r.cost.energy, stamina: r.cost.stamina };
+      if (r.quote) cur.quote = r.quote;
       if (!r.ok) {
         cur.ok = false;
         cur.reason = r.reason ?? 'failed';
@@ -246,6 +243,13 @@ export class ExecContext {
     }
     this.host.traceFail(this.mech, node, reason);
     return null;
+  }
+
+  /** Adds a labelled figure to the trace entry of the block running now (e.g. a variable's new value). */
+  detail(label: string, value: Value): void {
+    const cur = this.current;
+    if (!cur) return;
+    (cur.details ??= []).push({ label, value: formatValue(value) });
   }
 
   /** Records a pause/resume of this run in the trace. */
@@ -314,6 +318,10 @@ export class ExecContext {
     return this.host.watchCharge(this, node, name, target);
   }
 
+  windUp(node: CompiledNode, seconds: number): boolean {
+    return this.host.windUp(this, node, seconds);
+  }
+
   emit(name: string, value: number): void {
     this.host.emitSignal(name, value, this.depth + 1, this.mech);
   }
@@ -357,7 +365,7 @@ export class MechanicHost implements MechanicDriver {
   private nextRun = 1;
   private queue: QueuedEvent[] = [];
   private delayed: Continuation[] = [];
-  private watches: ChargeWatch[] = [];
+  private watches: Watch[] = [];
   private seq = 0;
   private steps = 0;
   private eventsThisTick = 0;
@@ -484,6 +492,7 @@ export class MechanicHost implements MechanicDriver {
     this.delayed.length = 0;
     this.watches.length = 0;
     this.keyDownAt.clear();
+    if (this.world.player) this.world.player.windingUp = 0;
   }
 
   /**
@@ -492,6 +501,8 @@ export class MechanicHost implements MechanicDriver {
    */
   dispose(): HostCarry {
     const ctxs = new Set<ExecContext>([...this.delayed.map((c) => c.ctx), ...this.watches.map((w) => w.ctx)]);
+    const p = this.world.player;
+    if (p) p.windingUp = Math.max(0, p.windingUp - this.watches.filter((w) => w.kind === 'windup').length);
     this.delayed.length = 0;
     this.watches.length = 0;
     this.queue.length = 0;
@@ -500,6 +511,14 @@ export class MechanicHost implements MechanicDriver {
       ctx.settle();
     }
     return { trace: this.traceLog, characterScope: this.characterScope, scopes: this.scopes, states: this.states, keyDownAt: this.keyDownAt };
+  }
+
+  /** Energy released from charges into executions that are paused right now (delays, windups, channels). */
+  pooledEnergy(): number {
+    const ctxs = new Set<ExecContext>([...this.delayed.map((c) => c.ctx), ...this.watches.map((w) => w.ctx)]);
+    let sum = 0;
+    for (const c of ctxs) sum += c.funding.energy;
+    return sum;
   }
 
   // ---- internals used by ExecContext / primitives ----
@@ -548,8 +567,28 @@ export class MechanicHost implements MechanicDriver {
       return false;
     }
     ctx.refs++;
-    this.watches.push({ seq: this.seq++, ctx, node, name, target, started: this.world.time });
+    this.watches.push({ kind: 'charge', seq: this.seq++, ctx, node, name, target, started: this.world.time });
     ctx.note(node, 'wait', `channelling "${name}" until it holds ${formatValue(target)} E`);
+    return true;
+  }
+
+  windUp(ctx: ExecContext, node: CompiledNode, seconds: number): boolean {
+    const pending = this.delayed.filter((c) => c.ctx.mech === ctx.mech).length + this.watches.filter((w) => w.ctx.mech === ctx.mech).length;
+    if (pending >= LIMITS.maxPendingPerMechanic) {
+      ctx.fail(node, `more than ${LIMITS.maxPendingPerMechanic} pending delays and windups`, 'limit');
+      return false;
+    }
+    const p = this.world.player;
+    if (!p || !p.alive) {
+      ctx.fail(node, 'you are down', 'requirement');
+      return false;
+    }
+    ctx.refs++;
+    p.windingUp++;
+    const now = this.world.time;
+    const wait = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+    this.watches.push({ kind: 'windup', seq: this.seq++, ctx, node, started: now, until: now + Math.max(wait, 1e-6) });
+    ctx.note(node, 'wait', `winding up for ${formatValue(wait)} s — moving slower; a hit of ${this.world.exchange.table.charge.interruptThreshold}+ damage breaks it`);
     return true;
   }
 
@@ -681,32 +720,60 @@ export class MechanicHost implements MechanicDriver {
 
   private checkWatches(now: number): void {
     const player = this.world.player;
-    const keep: ChargeWatch[] = [];
-    const resumes: { w: ChargeWatch; port: string }[] = [];
+    const ex = this.world.exchange;
+    const keep: Watch[] = [];
+    const resumes: { w: Watch; port: string; ok: boolean; text: string; extra: Partial<TraceEntry> }[] = [];
     for (const w of this.watches) {
+      if (w.kind === 'windup') {
+        const broken = !player || !player.alive || player.staggeredAt >= w.started;
+        if (broken) {
+          if (player) player.windingUp = Math.max(0, player.windingUp - 1);
+          resumes.push({ w, port: 'interrupted', ok: false, text: 'windup interrupted', extra: { category: 'interrupted', reason: !player?.alive ? 'you went down' : 'you were hit while winding up' } });
+        } else if (now >= w.until - 1e-9) {
+          player.windingUp = Math.max(0, player.windingUp - 1);
+          const prepared = now - w.started;
+          ex.fund(w.ctx.funding, 0, prepared);
+          const { factor } = ex.windupOf(w.ctx.funding);
+          resumes.push({
+            w,
+            port: 'then',
+            ok: true,
+            text: 'wound up',
+            extra: { values: [{ port: 'prepared', value: `${formatValue(prepared)} s` }, { port: 'energy price', value: `×${formatValue(factor)}` }] },
+          });
+        } else keep.push(w);
+        continue;
+      }
       const ch = player?.account.charges.get(w.name);
-      if (!player || !player.alive || !ch) resumes.push({ w, port: 'interrupted' });
-      else if (ch.amount >= w.target - 1e-9) {
-        this.world.exchange.stopCharge(player, w.name);
-        const energy = this.world.exchange.releaseCharge(player, w.name);
-        w.ctx.funding.energy += energy;
-        w.ctx.setOutput(w.node, 'energy', energy);
-        resumes.push({ w, port: 'charged' });
-      } else if (!ch.channeling || now - w.started > LIMITS.channelTimeout) resumes.push({ w, port: 'interrupted' });
-      else keep.push(w);
+      if (!player || !player.alive || !ch) {
+        resumes.push({ w, port: 'interrupted', ok: false, text: `"${w.name}" interrupted`, extra: { category: 'interrupted', reason: !player?.alive ? 'you went down' : 'the charge is gone' } });
+      } else if (ch.amount >= w.target - 1e-9) {
+        ex.stopCharge(player, w.name);
+        const rel = ex.releaseCharge(player, w.name);
+        ex.fund(w.ctx.funding, rel.energy, rel.windup);
+        w.ctx.setOutput(w.node, 'energy', rel.energy);
+        resumes.push({
+          w,
+          port: 'charged',
+          ok: true,
+          text: `"${w.name}" charged`,
+          extra: { values: [{ port: 'energy', value: formatValue(rel.energy) }, { port: 'prepared', value: `${formatValue(rel.windup)} s` }] },
+        });
+      } else if (!ch.channeling || now - w.started > LIMITS.channelTimeout) {
+        resumes.push({
+          w,
+          port: 'interrupted',
+          ok: false,
+          text: `"${w.name}" interrupted`,
+          extra: { category: 'interrupted', reason: ch.channeling ? `still short after ${LIMITS.channelTimeout} s` : 'channelling stopped — hit, or held by another block' },
+        });
+      } else keep.push(w);
     }
     this.watches = keep;
     resumes.sort((a, b) => a.w.seq - b.w.seq);
-    for (const { w, port } of resumes) {
+    for (const { w, port, ok, text, extra } of resumes) {
       w.ctx.refs--;
-      const charged = port === 'charged';
-      w.ctx.note(w.node, 'resume', charged ? `"${w.name}" charged` : `"${w.name}" interrupted`, {
-        port,
-        ok: charged,
-        ...(charged
-          ? { values: [{ port: 'energy', value: formatValue(Number(w.ctx.outputs.get(`${w.node.id}:energy`) ?? 0)) }] }
-          : { category: 'interrupted' as const, reason: !player?.alive ? 'you went down' : 'the charge stopped or was scattered' }),
-      });
+      w.ctx.note(w.node, 'resume', text, { port, ok, ...extra });
       this.execute(w.ctx, () => w.ctx.run(w.node, port));
     }
   }

@@ -6,7 +6,7 @@ import { Cannon, Turret, Walker } from './entities/enemies';
 import { CAT, type Entity, type EntityKind, type Material, type Team } from './entities/Entity';
 import { Player } from './entities/Player';
 import { Projectile, type ProjectileStyle } from './entities/Projectile';
-import { Bench, Cell, Crate, Door, Gate, Goal, Mover, Sign, Spikes, Target } from './entities/props';
+import { Bench, Cell, Crate, Door, Dynamo, Gate, Goal, Mover, Sign, Spikes, Target } from './entities/props';
 import { Exchange } from './exchange/Exchange';
 import { DEFAULT_EXCHANGE, cloneTable, type ExchangeTable } from './exchange/table';
 import type { FxEvent } from './fx';
@@ -148,6 +148,7 @@ export class World {
     const p = new Player(this, this.level.spawn.x, this.level.spawn.y);
     this.player = p;
     this.add(p);
+    this.exchange.resetAudit(p.account.energy);
   }
 
   spawnFromDef(sp: SpawnDef): Entity | null {
@@ -164,6 +165,8 @@ export class World {
         return this.add(new Target(sp.x, sp.y, sp.hp, sp.tag));
       case 'cell':
         return this.add(new Cell(sp.x, sp.y, sp.amount ?? this.exchange.table.pickups.cellEnergy));
+      case 'dynamo':
+        return this.add(new Dynamo(sp.x, sp.y, sp.reserve, sp.radius));
       case 'spikes':
         return this.add(new Spikes(sp.x, sp.y, sp.w, sp.h));
       case 'goal':
@@ -246,7 +249,6 @@ export class World {
     this.time = this.tick * DT;
     const player = this.player;
     if (player) player.input = input;
-    this.exchange.beginTick();
 
     this.mechanics?.beginTick();
     if (player && player.alive) this.mechanics?.fireInput(input);
@@ -448,7 +450,10 @@ export class World {
     e.lastHurtTime = this.time;
     this.emit({ type: 'hurt', pos: point, amount: dmg, entityId: e.id });
     if (e instanceof Player) {
-      if (dmg >= this.exchange.table.charge.interruptThreshold) this.exchange.interruptCharges(e);
+      if (dmg >= this.exchange.table.charge.interruptThreshold) {
+        e.staggeredAt = this.time;
+        this.exchange.interruptCharges(e);
+      }
       this.mechanics?.fire('damage.taken', { amount: dmg, attackerId, hit });
       if (dmg > 8) this.emit({ type: 'shake', intensity: Math.min(10, 2 + dmg * 0.08), duration: 0.2 });
     } else if (e instanceof Walker) {
@@ -484,6 +489,7 @@ export class World {
     p.hp = 0;
     p.deadAt = this.time;
     p.guard.active = false;
+    this.exchange.dropCharges(p);
     if (p.body) {
       Matter.Composite.remove(this.engine.world, p.body);
       this.bodiesCache = null;
@@ -504,6 +510,9 @@ export class World {
     p.account.energy = Math.min(this.level.startEnergy ?? t.energy.start, p.account.capacity);
     p.account.stamina = p.account.staminaMax;
     p.account.charges.clear();
+    p.windingUp = 0;
+    p.staggeredAt = -Infinity;
+    this.exchange.resetAudit(p.account.energy);
     Matter.Body.setPosition(p.body, this.level.spawn);
     p.vel = { x: 0, y: 0 };
     Matter.Composite.add(this.engine.world, p.body);
@@ -624,6 +633,16 @@ export class World {
     if (!p || !p.alive) return;
     this.interactCooldown -= DT;
     const pb = p.bounds();
+    for (const e of this.entities) {
+      if (!(e instanceof Dynamo) || !e.alive || e.reserve <= 0) continue;
+      if (Math.hypot(p.pos.x - e.pos.x, p.pos.y - e.pos.y) > e.radius) continue;
+      const want = Math.min(this.exchange.table.pickups.dynamoRate * DT, e.reserve);
+      const got = this.lawEnabled ? this.exchange.credit(p, want, 'Dynamo') : 0;
+      if (got > 0) {
+        e.reserve -= got;
+        e.feedingAt = this.time;
+      }
+    }
     for (const e of this.entities) {
       if (!e.alive) continue;
       if (e.kind !== 'cell' && e.kind !== 'goal' && e.kind !== 'door' && e.kind !== 'bench') continue;

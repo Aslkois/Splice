@@ -182,6 +182,13 @@ const SPECS: Record<string, Spec> = {
     optional: [],
     aka: ['windup', 'wait for charge'],
   },
+  'act.windUp': {
+    s: 'wind up for {i:seconds} s, then continue',
+    mouths: [{ port: 'interrupted', label: 'if interrupted' }],
+    cont: 'then',
+    optional: ['interrupted'],
+    aka: ['prepare', 'charge up', 'windup', 'efficiency'],
+  },
   'act.setFacing': { s: 'face {p:mode}', aka: ['turn', 'flip', 'change state'] },
   'fx.sound': { s: 'play sound {p:sound} at pitch {i:pitch}', aka: ['audio', 'noise'] },
 };
