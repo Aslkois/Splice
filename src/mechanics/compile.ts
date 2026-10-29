@@ -9,7 +9,7 @@ export interface CompiledMechanic {
   name: string;
   color: string;
   nodes: Map<string, CompiledNode>;
-  /** Event handlers per kind, in canvas order (top-to-bottom, then left-to-right). */
+  /** Event handlers per kind, in model order (the order of the node list). */
   events: Map<SimEventKind, CompiledNode[]>;
   issues: Issue[];
   /** False when the graph has errors; such mechanics are never executed. */
@@ -24,8 +24,8 @@ export function compileGraph(g: MechanicGraph, opts: ValidateOptions = {}): Comp
   const issues = validateGraph(g, opts);
   const ok = !issues.some((i) => i.severity === 'error');
   const nodes = new Map<string, CompiledNode>();
-  const sorted = [...g.nodes].sort((a, b) => a.y - b.y || a.x - b.x || (a.id < b.id ? -1 : 1));
-  sorted.forEach((n, order) => {
+  // Resolution order is the node list order — never screen position, which differs per editor.
+  g.nodes.forEach((n, order) => {
     const def = getPrimitive(n.type);
     if (!def) return;
     nodes.set(n.id, { id: n.id, type: n.type, def, params: { ...n.params }, order, execOut: new Map(), dataIn: new Map() });

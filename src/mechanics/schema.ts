@@ -1,6 +1,11 @@
 // Serializable mechanic graphs. This is the only shape that is saved; everything else is derived.
+//
+// Schema 2 separates behaviour from presentation:
+//   nodes + edges   the mechanic itself. The ORDER of `nodes` is meaningful: when several handlers
+//                   react to the same event, they run in this order. Both editors preserve it.
+//   layout          where each editor draws things. Changing it never changes behaviour.
 
-export const GRAPH_SCHEMA_VERSION = 1 as const;
+export const GRAPH_SCHEMA_VERSION = 2 as const;
 
 export type PortType = 'exec' | 'number' | 'boolean' | 'vector' | 'entity';
 
@@ -12,12 +17,24 @@ export interface VecValue {
 export type ParamValue = number | boolean | string | VecValue;
 
 export interface GraphNode {
+  /** Stable identity: survives editor switches, renames, save/load and migration. */
   id: string;
   type: string;
-  x: number;
-  y: number;
   /** Configuration params and literal values for unconnected data inputs, keyed by id. */
   params: Record<string, ParamValue>;
+}
+
+export interface LayoutPoint {
+  x: number;
+  y: number;
+}
+
+/** Presentation only. Each editor keeps its own positions; neither affects behaviour. */
+export interface GraphLayout {
+  /** Blueprint Blocks: position of every block, keyed by node id. */
+  blueprint: Record<string, LayoutPoint>;
+  /** Scratch Blocks: position of each top-level script or loose block, keyed by its top node id. */
+  scratch: Record<string, LayoutPoint>;
 }
 
 export interface GraphEdge {
@@ -37,8 +54,14 @@ export interface MechanicGraph {
   notes?: string;
   created: number;
   updated: number;
+  /** Behaviour. Order = resolution order for handlers of the same event. */
   nodes: GraphNode[];
   edges: GraphEdge[];
+  layout: GraphLayout;
+}
+
+export function emptyLayout(): GraphLayout {
+  return { blueprint: {}, scratch: {} };
 }
 
 export interface MechanicLibrary {
@@ -70,6 +93,7 @@ export function emptyGraph(name = 'Untitled Mechanic'): MechanicGraph {
     updated: now,
     nodes: [],
     edges: [],
+    layout: emptyLayout(),
   };
 }
 

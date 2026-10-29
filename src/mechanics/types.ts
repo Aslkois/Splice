@@ -45,7 +45,7 @@ export interface CompiledNode {
   type: string;
   def: PrimitiveDef;
   params: Record<string, ParamValue>;
-  /** Canvas order: top-to-bottom, then left-to-right. Used to order handlers of the same event. */
+  /** Position in the model's node list. Orders handlers of the same event. */
   order: number;
   execOut: Map<string, string>;
   dataIn: Map<string, { node: string; port: string }>;

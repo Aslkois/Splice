@@ -1,4 +1,4 @@
-import { GRAPH_SCHEMA_VERSION, MAX_EQUIPPED, emptyLibrary, type MechanicGraph, type MechanicLibrary } from './schema';
+import { GRAPH_SCHEMA_VERSION, MAX_EQUIPPED, emptyLibrary, type LayoutPoint, type MechanicGraph, type MechanicLibrary } from './schema';
 
 /**
  * Versioned (de)serialisation. Older schemas are migrated forward; anything unreadable is rejected
@@ -10,7 +10,43 @@ type Migration = (raw: Record<string, unknown>) => Record<string, unknown>;
 /** migrations[n] upgrades a graph from schema n to n + 1. */
 const GRAPH_MIGRATIONS: Record<number, Migration> = {
   0: (raw) => ({ ...raw, schema: 1, color: raw.color ?? '#ff7a3d', notes: raw.notes ?? '' }),
+  /**
+   * 1 → 2: positions move out of the nodes into `layout.blueprint`.
+   * Schema 1 ran handlers of the same event in canvas order (top-to-bottom, then left-to-right, then
+   * id). That order is now made explicit by sorting the node list exactly the same way, so every
+   * existing mechanic behaves identically after migration.
+   */
+  1: (raw) => {
+    const nodes = (Array.isArray(raw.nodes) ? raw.nodes : []) as Record<string, unknown>[];
+    const pos = (n: Record<string, unknown>) => ({ x: Number(n.x) || 0, y: Number(n.y) || 0 });
+    const sorted = [...nodes].sort((a, b) => {
+      const pa = pos(a);
+      const pb = pos(b);
+      return pa.y - pb.y || pa.x - pb.x || (String(a.id) < String(b.id) ? -1 : 1);
+    });
+    const blueprint: Record<string, LayoutPoint> = {};
+    for (const n of sorted) if (typeof n.id === 'string') blueprint[n.id] = pos(n);
+    return {
+      ...raw,
+      schema: 2,
+      nodes: sorted.map((n) => ({ id: n.id, type: n.type, params: n.params })),
+      layout: { blueprint, scratch: {} },
+    };
+  },
 };
+
+function sanitizeLayout(raw: unknown, ids: Set<string>): Record<string, LayoutPoint> {
+  const out: Record<string, LayoutPoint> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!ids.has(k) || !v || typeof v !== 'object') continue;
+    const p = v as { x?: unknown; y?: unknown };
+    const x = Number(p.x);
+    const y = Number(p.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) out[k] = { x, y };
+  }
+  return out;
+}
 
 export function migrateGraph(input: unknown): MechanicGraph {
   if (!input || typeof input !== 'object') throw new Error('not a mechanic');
@@ -29,11 +65,11 @@ export function migrateGraph(input: unknown): MechanicGraph {
     return {
       id: n.id,
       type: n.type,
-      x: Number(n.x) || 0,
-      y: Number(n.y) || 0,
       params: sanitizeParams(n.params),
     };
   });
+  const ids = new Set(nodes.map((n) => n.id));
+  const rawLayout = (raw.layout && typeof raw.layout === 'object' ? raw.layout : {}) as Record<string, unknown>;
   const edges = (raw.edges as Record<string, unknown>[]).map((e) => {
     if (typeof e.id !== 'string' || typeof e.from !== 'string' || typeof e.to !== 'string') throw new Error('malformed wire');
     return { id: e.id, from: e.from, fromPort: String(e.fromPort), to: e.to, toPort: String(e.toPort) };
@@ -48,6 +84,7 @@ export function migrateGraph(input: unknown): MechanicGraph {
     updated: Number(raw.updated) || Date.now(),
     nodes,
     edges,
+    layout: { blueprint: sanitizeLayout(rawLayout.blueprint, ids), scratch: sanitizeLayout(rawLayout.scratch, ids) },
   };
 }
 

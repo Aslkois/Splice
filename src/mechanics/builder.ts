@@ -22,7 +22,8 @@ export class GraphBuilder {
     const def = getPrimitive(type);
     if (!def) throw new Error(`unknown primitive ${type}`);
     const id = `n${++this.n}`;
-    this.graph.nodes.push({ id, type, x: pos?.x ?? (this.n % 4) * 260, y: pos?.y ?? this.n * 120, params: { ...defaultParams(def), ...params } });
+    this.graph.nodes.push({ id, type, params: { ...defaultParams(def), ...params } });
+    this.graph.layout.blueprint[id] = { x: pos?.x ?? (this.n % 4) * 260, y: pos?.y ?? this.n * 120 };
     return id;
   }
 

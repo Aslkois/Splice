@@ -14,7 +14,8 @@ import {
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { synth } from '../../audio/Synth';
 import { compileGraph } from '../../mechanics/compile';
-import { defaultParams, getPrimitive, inputPorts, outputPorts } from '../../mechanics/registry';
+import { addNode, duplicateNodes, ensureBlueprintLayout, setLayout } from '../../mechanics/edit';
+import { getPrimitive, inputPorts, outputPorts } from '../../mechanics/registry';
 import type { NodeTrace } from '../../mechanics/runtime';
 import { uid, type GraphEdge, type MechanicGraph, type ParamValue, type PortType } from '../../mechanics/schema';
 import { checkConnection, type Issue, type ValidateOptions } from '../../mechanics/validate';
@@ -48,7 +49,8 @@ function toFlowEdges(g: MechanicGraph): CableEdgeType[] {
 
 function toFlowNodes(g: MechanicGraph, prev: ModuleNodeType[] = []): ModuleNodeType[] {
   const sel = new Set(prev.filter((n) => n.selected).map((n) => n.id));
-  return g.nodes.map((n) => ({ id: n.id, type: 'module', position: { x: n.x, y: n.y }, data: { type: n.type }, selected: sel.has(n.id) }));
+  const laid = ensureBlueprintLayout(g);
+  return g.nodes.map((n) => ({ id: n.id, type: 'module', position: { ...laid.layout.blueprint[n.id] }, data: { type: n.type }, selected: sel.has(n.id) }));
 }
 
 export interface GraphEditorHandle {
@@ -131,9 +133,8 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
     (type: string, pos: { x: number; y: number }) => {
       const def = getPrimitive(type);
       if (!def) return;
-      const g = synced.current;
-      const id = uid('n');
-      commit({ ...g, nodes: [...g.nodes, { id, type, x: Math.round(pos.x), y: Math.round(pos.y), params: defaultParams(def) }] });
+      const { graph: next, id } = addNode(synced.current, type, { at: { editor: 'blueprint', pos } });
+      commit(next);
       setNodes((prev) => [...prev.map((n) => ({ ...n, selected: false })), { id, type: 'module', position: pos, data: { type }, selected: true }]);
       synth.uiDrop();
     },
@@ -165,15 +166,13 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
 
   const onNodeDragStop = useCallback(() => {
     const g = synced.current;
-    const pos = new Map(rf.getNodes().map((n) => [n.id, n.position]));
-    let moved = false;
-    const next = g.nodes.map((n) => {
-      const p = pos.get(n.id);
-      if (!p || (Math.round(p.x) === n.x && Math.round(p.y) === n.y)) return n;
-      moved = true;
-      return { ...n, x: Math.round(p.x), y: Math.round(p.y) };
-    });
-    if (moved) commit({ ...g, nodes: next });
+    const changed: Record<string, { x: number; y: number }> = {};
+    for (const n of rf.getNodes()) {
+      const old = g.layout.blueprint[n.id];
+      const p = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
+      if (!old || old.x !== p.x || old.y !== p.y) changed[n.id] = p;
+    }
+    if (Object.keys(changed).length) commit(setLayout(g, 'blueprint', changed));
   }, [commit, rf]);
 
   const onDelete = useCallback(
@@ -293,12 +292,10 @@ export const GraphEditor = forwardRef<GraphEditorHandle, Props>(function GraphEd
       if ((k === 'v' || k === 'd') && clipboard) {
         e.preventDefault();
         const g = synced.current;
-        const map = new Map(clipboard.nodes.map((n) => [n.id, uid('n')]));
-        const nn = clipboard.nodes.map((n) => ({ ...n, id: map.get(n.id)!, x: n.x + 40, y: n.y + 40, params: { ...n.params } }));
-        const ne = clipboard.edges.map((ed) => ({ ...ed, id: uid('e'), from: map.get(ed.from)!, to: map.get(ed.to)! }));
-        const next = { ...g, nodes: [...g.nodes, ...nn], edges: [...g.edges, ...ne] };
+        const { graph: next, map } = duplicateNodes(g, clipboard.nodes.map((n) => n.id).filter((id) => g.nodes.some((n) => n.id === id)));
+        const fresh = new Set(map.values());
         commit(next);
-        setNodes(toFlowNodes(next).map((n) => ({ ...n, selected: map.has(n.id) ? false : nn.some((x) => x.id === n.id) })));
+        setNodes(toFlowNodes(next).map((n) => ({ ...n, selected: fresh.has(n.id) })));
         setEdges(toFlowEdges(next));
         synth.uiDrop();
       }
