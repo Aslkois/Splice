@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { synth } from '../audio/Synth';
 import { Cannon, Turret, Walker } from '../sim/entities/enemies';
 import { Projectile } from '../sim/entities/Projectile';
-import { Cell, Crate, Door, Gate, Goal, Sign, Spikes, Target } from '../sim/entities/props';
+import { Cell, Crate, Door, Gate, Goal, Mover, Sign, Spikes, Target } from '../sim/entities/props';
 import type { FxEvent } from '../sim/fx';
 import type { Vec } from '../sim/math';
 import { presentation, runner } from './bridge';
@@ -14,6 +14,7 @@ import {
   drawDoor,
   drawGate,
   drawGoal,
+  drawMover,
   drawPlayer,
   drawProjectile,
   drawSpikes,
@@ -145,6 +146,7 @@ export class PlayScene extends Phaser.Scene {
     for (const id of this.telegraphs) synth.stopTelegraph(id);
     this.telegraphs.clear();
     this.fitCamera();
+    this.cameras.main.fadeIn(280, 21, 22, 28);
   }
 
   override update(_time: number, delta: number): void {
@@ -210,6 +212,7 @@ export class PlayScene extends Phaser.Scene {
     for (const e of world.entities) {
       if (!e.alive) continue;
       if (e instanceof Crate) lerped(e, () => drawCrate(g, e, now));
+      else if (e instanceof Mover) lerped(e, () => drawMover(g, e, now));
       else if (e instanceof Target) drawTarget(g, e, now);
       else if (e instanceof Cell) drawCell(g, e, now);
       else if (e instanceof Turret) drawTurret(g, e, now);

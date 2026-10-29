@@ -6,7 +6,7 @@ import { Cannon, Turret, Walker } from './entities/enemies';
 import { CAT, type Entity, type EntityKind, type Material, type Team } from './entities/Entity';
 import { Player } from './entities/Player';
 import { Projectile, type ProjectileStyle } from './entities/Projectile';
-import { Bench, Cell, Crate, Door, Gate, Goal, Sign, Spikes, Target } from './entities/props';
+import { Bench, Cell, Crate, Door, Gate, Goal, Mover, Sign, Spikes, Target } from './entities/props';
 import { Exchange } from './exchange/Exchange';
 import { DEFAULT_EXCHANGE, cloneTable, type ExchangeTable } from './exchange/table';
 import type { FxEvent } from './fx';
@@ -176,6 +176,8 @@ export class World {
         return this.add(new Sign(sp.x, sp.y, sp.text, sp.w));
       case 'gate':
         return this.add(new Gate(sp.x, sp.y, sp.w, sp.h, sp.opensWhen));
+      case 'mover':
+        return this.add(new Mover(sp.x, sp.y, sp.w, sp.h ?? 22, { x: sp.toX, y: sp.toY }, sp.speed ?? 120));
     }
   }
 
@@ -250,7 +252,8 @@ export class World {
     if (player && player.alive) this.mechanics?.fireInput(input);
     this.mechanics?.flush();
 
-    for (const e of this.entities) if (e.alive && e.kind !== 'projectile') e.update(this);
+    for (const e of this.entities) if (e.alive && e.kind === 'mover') e.update(this);
+    for (const e of this.entities) if (e.alive && e.kind !== 'projectile' && e.kind !== 'mover') e.update(this);
     if (player && player.alive) this.exchange.tickChannels(player);
 
     this.preVel.clear();
@@ -742,7 +745,7 @@ export class World {
     for (let i = this.entities.length - 1; i >= 0; i--) {
       const e = this.entities[i];
       if (!e.alive || e === this.player) continue;
-      if (e.kind === 'sign' || e.kind === 'door' || e.kind === 'bench') continue;
+      if (e.kind === 'sign' || e.kind === 'door' || e.kind === 'bench' || e.kind === 'mover') continue;
       const b = e.bounds();
       if (at.x >= b.minX - 6 && at.x <= b.maxX + 6 && at.y >= b.minY - 6 && at.y <= b.maxY + 6) {
         this.destroy(e, 'removed');

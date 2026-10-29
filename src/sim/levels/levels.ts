@@ -160,6 +160,8 @@ export const ARENA: LevelDef = {
     { type: 'target', x: 2700, y: 828 },
     { type: 'target', x: 3300, y: 668 },
     { type: 'spikes', x: 1900, y: 1162, w: 140, h: 18 },
+    { type: 'mover', x: 1470, y: 1180, w: 120, toX: 1470, toY: 740, speed: 140 },
+    { type: 'mover', x: 2350, y: 620, w: 140, toX: 2750, toY: 620, speed: 160 },
     { type: 'turret', x: 2200, y: 960, facing: -1, range: 900 },
     { type: 'turret', x: 3200, y: 680, facing: -1, interval: 2.2, range: 1100 },
     { type: 'walker', x: 2700, y: 1150 },

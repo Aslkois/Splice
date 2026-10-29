@@ -25,7 +25,9 @@ export type SpawnDef =
   | { type: 'bench'; x: number; y: number }
   | { type: 'sign'; x: number; y: number; text: string; w?: number }
   /** A barrier that dissolves when every entity carrying `opensWhen` is destroyed. x/y top-left. */
-  | { type: 'gate'; x: number; y: number; w: number; h: number; opensWhen: string };
+  | { type: 'gate'; x: number; y: number; w: number; h: number; opensWhen: string }
+  /** Moving platform, x/y top-left, shuttling to toX/toY. */
+  | { type: 'mover'; x: number; y: number; w: number; h?: number; toX: number; toY: number; speed?: number };
 
 export type ObjectiveDef =
   | { kind: 'reach'; zoneTag: string; text: string }

@@ -1,4 +1,7 @@
 import Matter from 'matter-js';
+import { DT } from '../config';
+import type { Vec } from '../math';
+import type { World } from '../World';
 import { CAT, Entity } from './Entity';
 
 export class Crate extends Entity {
@@ -143,5 +146,54 @@ export class Gate extends Entity {
       collisionFilter: { category: CAT.GATE, mask: 0xffff },
       label: 'gate',
     });
+  }
+}
+
+/** A platform that shuttles between two points and carries whatever stands on it. */
+export class Mover extends Entity {
+  readonly kind = 'mover' as const;
+  from: Vec;
+  to: Vec;
+  speed: number;
+  private t = 0;
+  private dir = 1;
+  delta: Vec = { x: 0, y: 0 };
+
+  constructor(x: number, y: number, w: number, h: number, to: Vec, speed: number) {
+    super();
+    this.w = w;
+    this.h = h;
+    this.from = { x: x + w / 2, y: y + h / 2 };
+    this.to = { x: to.x + w / 2, y: to.y + h / 2 };
+    this.speed = speed;
+    this.body = Matter.Bodies.rectangle(this.from.x, this.from.y, w, h, {
+      isStatic: true,
+      friction: 0.8,
+      collisionFilter: { category: CAT.SOLID, mask: 0xffff },
+      label: 'mover',
+    });
+  }
+
+  override update(world: World): void {
+    if (!this.body) return;
+    const len = Math.hypot(this.to.x - this.from.x, this.to.y - this.from.y) || 1;
+    this.t += (this.dir * this.speed * DT) / len;
+    if (this.t >= 1 || this.t <= 0) {
+      this.t = Math.max(0, Math.min(1, this.t));
+      this.dir = -this.dir;
+    }
+    // Ease at the ends so riders aren't jolted.
+    const e = 0.5 - 0.5 * Math.cos(this.t * Math.PI);
+    const next = { x: this.from.x + (this.to.x - this.from.x) * e, y: this.from.y + (this.to.y - this.from.y) * e };
+    const cur = this.body.position;
+    this.delta = { x: next.x - cur.x, y: next.y - cur.y };
+    // Carry riders: anything resting on the top surface moves with the platform.
+    const b = this.body.bounds;
+    const strip = { min: { x: b.min.x + 2, y: b.min.y - 6 }, max: { x: b.max.x - 2, y: b.min.y + 2 } };
+    for (const body of Matter.Query.region(world.allBodies(), strip)) {
+      if (body === this.body || body.isStatic) continue;
+      Matter.Body.translate(body, this.delta);
+    }
+    Matter.Body.setPosition(this.body, next);
   }
 }

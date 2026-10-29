@@ -205,3 +205,27 @@ describe('Law of Equivalent Exchange', () => {
     expect(after.amount).toBeCloseTo(before * 0.5, 3);
   });
 });
+
+describe('cost previews match what the ledger charges', () => {
+  it('impulse and projectile previews agree with real transactions', async () => {
+    const { previewCost } = await import('../src/mechanics/costPreview');
+    const b = new GraphBuilder('Price check');
+    const ev = b.node('on.keyPressed', { key: 'Q' });
+    const imp = b.node('act.impulse', { impulse: { x: 0, y: -650 } });
+    const ev2 = b.node('on.keyPressed', { key: 'R' });
+    const shot = b.node('act.projectile', { speed: 1200, mass: 0.2 });
+    b.flow(ev, 'then', imp).flow(ev2, 'then', shot);
+    const g = b.build();
+    const w = makeWorld();
+    attachMechanics(w, [g]);
+    const d = new Driver(w);
+    d.run(0.3);
+    d.tap('Q', 1);
+    d.tap('R', 1);
+    const [ti, tp] = w.exchange.log.filter((t) => t.ok && (t.label === 'Impulse' || t.label === 'Projectile'));
+    const pi = previewCost(g.nodes.find((n) => n.id === imp)!, () => false)!;
+    const pp = previewCost(g.nodes.find((n) => n.id === shot)!, () => false)!;
+    expect(pi).toContain(`${Math.round(ti.energy * 10) / 10} E`);
+    expect(pp).toContain(`${Math.round(tp.energy * 10) / 10} E`);
+  });
+});

@@ -1,5 +1,6 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { memo } from 'react';
+import { previewCost } from '../../mechanics/costPreview';
 import { getPrimitive, nodeTitle } from '../../mechanics/registry';
 import type { ParamValue, VecValue } from '../../mechanics/schema';
 import type { ParamDef, PortDef } from '../../mechanics/types';
@@ -79,6 +80,7 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
   const def = node ? getPrimitive(node.type) : undefined;
   if (!node || !def) return <div className="mod mod-missing">Unknown block</div>;
   const issues = ed.issuesByNode.get(id) ?? [];
+  const price = previewCost(node, (port) => ed.connectedInputs.has(`${id}:${port}`));
   const error = issues.find((i) => i.severity === 'error');
   const warning = issues.find((i) => i.severity === 'warning');
   const trace = ed.trace?.get(id);
@@ -145,7 +147,11 @@ export const ModuleNode = memo(function ModuleNode({ id, selected }: NodeProps<M
         </div>
       )}
 
-      {def.cost && <div className="mod-cost">{def.cost}</div>}
+      {(price || def.cost) && (
+        <div className="mod-cost" title={def.cost}>
+          {price ?? def.cost}
+        </div>
+      )}
       {trace && trace.count > 0 && (
         <div className={`mod-trace ${trace.lastFail && trace.lastFailTick === trace.lastTick ? 'bad' : ''}`}>
           <span>Ran {trace.count}×</span>

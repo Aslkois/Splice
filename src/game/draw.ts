@@ -3,7 +3,7 @@ import type { Cannon, Turret, Walker } from '../sim/entities/enemies';
 import type { Entity } from '../sim/entities/Entity';
 import type { Player } from '../sim/entities/Player';
 import type { Projectile } from '../sim/entities/Projectile';
-import type { Cell, Crate, Door, Gate, Goal, Spikes, Target } from '../sim/entities/props';
+import type { Cell, Crate, Door, Gate, Goal, Mover, Spikes, Target } from '../sim/entities/props';
 import type { LevelDef } from '../sim/levels/types';
 import type { Vec } from '../sim/math';
 import { INK, mix, SIGNAL, WHITE, type Theme } from './palette';
@@ -673,4 +673,30 @@ export function drawProjectile(g: G, p: Projectile): void {
     g.lineStyle(2, WHITE, 0.9);
     g.strokeCircle(pos.x, pos.y, p.radius + 5);
   }
+}
+
+export function drawMover(g: G, m: Mover, now: number): void {
+  const b = m.bounds();
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  g.fillStyle(0x2e3b42, 1);
+  g.fillRect(b.minX, b.minY, w, h);
+  g.fillStyle(SIGNAL.teal, 1);
+  g.fillRect(b.minX, b.minY, w, 7);
+  // chevrons point the way it is travelling
+  const dx = m.delta.x;
+  const dy = m.delta.y;
+  const ang = Math.abs(dx) + Math.abs(dy) < 0.01 ? 0 : Math.atan2(dy, dx);
+  const phase = (now * 2) % 1;
+  g.lineStyle(2, SIGNAL.teal, 0.8);
+  for (let x = b.minX + 14 + phase * 18; x < b.maxX - 10; x += 18) {
+    const cx = x;
+    const cy = b.minY + h / 2 + 3;
+    const ca = Math.cos(ang);
+    const sa = Math.sin(ang);
+    g.lineBetween(cx - ca * 4 - sa * 4, cy - sa * 4 + ca * 4, cx + ca * 3, cy + sa * 3);
+    g.lineBetween(cx - ca * 4 + sa * 4, cy - sa * 4 - ca * 4, cx + ca * 3, cy + sa * 3);
+  }
+  g.lineStyle(OUT, INK, 1);
+  g.strokeRect(b.minX, b.minY, w, h);
 }
